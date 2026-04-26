@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using Chess960Game.Domain.Board;
+﻿using Chess960Game.Domain.Board;
 using Chess960Game.Domain.Game;
 using Chess960Game.Domain.Moves;
 using Chess960Game.Domain.Pieces;
@@ -7,7 +6,10 @@ using Chess960Game.Domain.Setup;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System.Collections.Generic;
 using System.IO.Pipelines;
+using System.Linq;
+
 
 namespace Chess960Game.Desktop;
 
@@ -23,6 +25,7 @@ public class Game1 : Game
 
     private MouseState _previousMouseState;
     private Position? _selectedPosition;
+    private List<Move> _selectedMoves = new();
 
     private const int TileSize = 80;
     private const int Padding = 40;
@@ -90,6 +93,7 @@ public class Game1 : Game
 
         DrawBoard();
         DrawSelectedCell();
+        DrawAvailableMoves();
         DrawPieces();
         DrawCoordinates();
 
@@ -114,6 +118,7 @@ public class Game1 : Game
                 return;
 
             _selectedPosition = clickedPosition;
+            _selectedMoves = _moveGenerator.GenerateMovesForPiece(_game.Board, clickedPosition);
             return;
         }
 
@@ -123,6 +128,7 @@ public class Game1 : Game
         if (piece is null)
         {
             _selectedPosition = null;
+            _selectedMoves.Clear();
             return;
         }
 
@@ -136,6 +142,8 @@ public class Game1 : Game
         }
 
         _selectedPosition = null;
+        _selectedMoves.Clear();
+
     }
 
     private bool TryGetBoardPosition(int mouseX, int mouseY, out Position position)
@@ -196,7 +204,7 @@ public class Game1 : Game
             TileSize
         );
 
-        _spriteBatch.Draw(_pixel, rect, Color.Yellow * 0.45f);
+        _spriteBatch.Draw(_pixel, rect, Color.Yellow);
     }
 
     private void DrawPieces()
@@ -283,5 +291,44 @@ public class Game1 : Game
 
         // Основной текст
         _spriteBatch.DrawString(_font, text, position, color);
+    }
+    private void DrawAvailableMoves()
+    {
+        foreach (var move in _selectedMoves)
+        {
+            var pos = move.To;
+
+            int centerX =
+                Padding + pos.Col * TileSize + TileSize / 2;
+
+            int centerY =
+                Padding + pos.Row * TileSize + TileSize / 2;
+
+            DrawCircle(
+                centerX,
+                centerY,
+                10,
+                new Color(60, 60, 60) // тёмно-серый
+            );
+        }
+    }
+    private void DrawCircle(int centerX, int centerY, int radius, Color color)
+    {
+        int diameter = radius * 2;
+
+        for (int x = -radius; x <= radius; x++)
+        {
+            for (int y = -radius; y <= radius; y++)
+            {
+                if (x * x + y * y <= radius * radius)
+                {
+                    _spriteBatch.Draw(
+                        _pixel,
+                        new Rectangle(centerX + x, centerY + y, 1, 1),
+                        color
+                    );
+                }
+            }
+        }
     }
 }
