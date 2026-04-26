@@ -1,0 +1,19 @@
+# Build files
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# User files
+*.user
+*.suo
+
+# MonoGame
+*.mgcontent
+*.mgcb-editor
+
+# OS files
+Thumbs.db
+.DS_Store

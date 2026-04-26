@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Chess960Game.Console/Chess960Game.Console.csproj" />
+  <Project Path="Chess960Game.Desktop/Chess960Game.Desktop.csproj" />
+  <Project Path="Chess960Game.Domain/Chess960Game.Domain.csproj" />
+  <Project Path="Chess960Game.Tests/Chess960Game.Tests.csproj" />
+</Solution>
