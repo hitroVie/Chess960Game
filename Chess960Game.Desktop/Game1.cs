@@ -49,6 +49,7 @@ public class Game1 : Game
     private bool _blackKingsideRookMoved = false;
     private bool _blackQueensideRookMoved = false;
 
+    private PieceColor _botColor;
     private PieceColor _playerColor;
     private readonly Random _random = new();
     public Game1()
@@ -74,10 +75,13 @@ public class Game1 : Game
         _playerColor = _random.Next(2) == 0
             ? PieceColor.White
             : PieceColor.Black;
+        _botColor = _playerColor == PieceColor.White
+            ? PieceColor.Black
+            : PieceColor.White;
 
         UpdateGameStatus();
         CreatePromotionButtons();
-
+        TryMakeBotMove();
         base.Initialize();
     }
 
@@ -154,6 +158,8 @@ public class Game1 : Game
 
             if (clickedPiece.Color != _game.SideToMove)
                 return;
+            if (clickedPiece.Color != _playerColor)
+                return;
 
             _selectedPosition = clickedPosition;
             _selectedMoves = _moveGenerator.GenerateLegalMovesForPiece(_game.Board, clickedPosition);
@@ -205,6 +211,8 @@ public class Game1 : Game
             _game.Board.MovePiece(from, clickedPosition);
             _game.SwitchTurn();
             UpdateGameStatus();
+
+            TryMakeBotMove();
         }
 
         _selectedPosition = null;
@@ -479,6 +487,8 @@ public class Game1 : Game
             _game.SwitchTurn();
             UpdateGameStatus();
 
+            TryMakeBotMove();
+
             return;
         }
     }
@@ -745,5 +755,50 @@ public class Game1 : Game
             return new Position(screenRow, screenCol);
 
         return new Position(7 - screenRow, 7 - screenCol);
+    }
+
+    private void TryMakeBotMove()
+    {
+        if (_gameOver)
+            return;
+
+        if (_waitingForPromotion)
+            return;
+
+        if (_game.SideToMove != _botColor)
+            return;
+
+        var legalMoves = _moveGenerator.GenerateAllLegalMoves(_game.Board, _botColor);
+
+        if (legalMoves.Count == 0)
+        {
+            UpdateGameStatus();
+            return;
+        }
+
+        var move = legalMoves[_random.Next(legalMoves.Count)];
+
+        var piece = _game.Board.GetPiece(move.From);
+
+        if (piece is null)
+            return;
+
+        MarkPieceMoved(move.From, piece);
+
+        if (move.Promotion is not null)
+        {
+            _game.Board.SetPiece(move.From, null);
+            _game.Board.SetPiece(
+                move.To,
+                new Piece(PieceType.Queen, piece.Color)
+            );
+        }
+        else
+        {
+            _game.Board.MovePiece(move.From, move.To);
+        }
+
+        _game.SwitchTurn();
+        UpdateGameStatus();
     }
 }
