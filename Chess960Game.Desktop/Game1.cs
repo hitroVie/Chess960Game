@@ -6,6 +6,7 @@ using Chess960Game.Domain.Setup;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -39,6 +40,14 @@ public class Game1 : Game
     private const int Padding = 40;
     private const int BoardSize = TileSize * 8;
 
+    private bool _whiteKingMoved = false;
+    private bool _blackKingMoved = false;
+
+    private bool _whiteKingsideRookMoved = false;
+    private bool _whiteQueensideRookMoved = false;
+
+    private bool _blackKingsideRookMoved = false;
+    private bool _blackQueensideRookMoved = false;
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this);
@@ -153,6 +162,14 @@ public class Game1 : Game
             return;
         }
 
+        // Рокировка: выбрали ладью, потом кликнули по своему королю
+        if (TryCastleByRookClick(from, clickedPosition))
+        {
+            _selectedPosition = null;
+            _selectedMoves.Clear();
+            return;
+        }
+
         var moves = _moveGenerator.GenerateLegalMovesForPiece(_game.Board, from);
         bool canMove = moves.Any(m => m.To == clickedPosition);
 
@@ -174,6 +191,8 @@ public class Game1 : Game
 
                 return;
             }
+
+            MarkPieceMoved(from, piece);
 
             _game.Board.MovePiece(from, clickedPosition);
             _game.SwitchTurn();
@@ -475,5 +494,219 @@ public class Game1 : Game
         _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
         _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
         _spriteBatch.Draw(_pixel, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
+    }
+    private bool TryCastleByRookClick(Position rookPosition, Position kingPosition)
+    {
+        var rook = _game.Board.GetPiece(rookPosition);
+        var king = _game.Board.GetPiece(kingPosition);
+
+        if (rook is null || king is null)
+            return false;
+
+        if (rook.Type != PieceType.Rook)
+            return false;
+
+        if (king.Type != PieceType.King)
+            return false;
+
+        if (rook.Color != king.Color)
+            return false;
+
+        if (rook.Color != _game.SideToMove)
+            return false;
+
+        var color = rook.Color;
+        bool isKingside = rookPosition.Col > kingPosition.Col;
+
+        if (!HasCastlingRight(color, isKingside))
+            return false;
+
+        var expectedKingStart = color == PieceColor.White
+            ? _game.WhiteKingStart
+            : _game.BlackKingStart;
+
+        var expectedRookStart = GetExpectedRookStart(color, isKingside);
+
+        if (kingPosition != expectedKingStart)
+            return false;
+
+        if (rookPosition != expectedRookStart)
+            return false;
+
+        if (_moveGenerator.IsKingInCheck(_game.Board, color))
+            return false;
+
+        int row = color == PieceColor.White ? 7 : 0;
+
+        var finalKingPosition = new Position(row, isKingside ? 6 : 2);
+        var finalRookPosition = new Position(row, isKingside ? 5 : 3);
+
+        if (!IsCastlingPathClear(kingPosition, finalKingPosition, kingPosition, rookPosition))
+            return false;
+
+        if (!IsCastlingPathClear(rookPosition, finalRookPosition, kingPosition, rookPosition))
+            return false;
+
+        foreach (var pos in GetPositionsBetweenInclusive(kingPosition, finalKingPosition))
+        {
+            if (!IsKingSafeOnCastlingSquare(kingPosition, rookPosition, pos, color))
+                return false;
+        }
+
+        _game.Board.SetPiece(kingPosition, null);
+        _game.Board.SetPiece(rookPosition, null);
+
+        _game.Board.SetPiece(finalKingPosition, new Piece(PieceType.King, color));
+        _game.Board.SetPiece(finalRookPosition, new Piece(PieceType.Rook, color));
+
+        MarkKingMoved(color);
+        MarkRookMoved(color, isKingside);
+
+        _game.SwitchTurn();
+        UpdateGameStatus();
+
+        return true;
+    }
+
+    private bool HasCastlingRight(PieceColor color, bool isKingside)
+    {
+        if (color == PieceColor.White)
+        {
+            if (_whiteKingMoved)
+                return false;
+
+            return isKingside
+                ? !_whiteKingsideRookMoved
+                : !_whiteQueensideRookMoved;
+        }
+
+        if (_blackKingMoved)
+            return false;
+
+        return isKingside
+            ? !_blackKingsideRookMoved
+            : !_blackQueensideRookMoved;
+    }
+
+    private Position GetExpectedRookStart(PieceColor color, bool isKingside)
+    {
+        if (color == PieceColor.White)
+        {
+            return isKingside
+                ? _game.WhiteKingsideRookStart
+                : _game.WhiteQueensideRookStart;
+        }
+
+        return isKingside
+            ? _game.BlackKingsideRookStart
+            : _game.BlackQueensideRookStart;
+    }
+
+    private void MarkPieceMoved(Position from, Piece piece)
+    {
+        if (piece.Type == PieceType.King)
+        {
+            MarkKingMoved(piece.Color);
+            return;
+        }
+
+        if (piece.Type != PieceType.Rook)
+            return;
+
+        if (piece.Color == PieceColor.White)
+        {
+            if (from == _game.WhiteKingsideRookStart)
+                _whiteKingsideRookMoved = true;
+
+            if (from == _game.WhiteQueensideRookStart)
+                _whiteQueensideRookMoved = true;
+        }
+        else
+        {
+            if (from == _game.BlackKingsideRookStart)
+                _blackKingsideRookMoved = true;
+
+            if (from == _game.BlackQueensideRookStart)
+                _blackQueensideRookMoved = true;
+        }
+    }
+
+    private void MarkKingMoved(PieceColor color)
+    {
+        if (color == PieceColor.White)
+            _whiteKingMoved = true;
+        else
+            _blackKingMoved = true;
+    }
+
+    private void MarkRookMoved(PieceColor color, bool isKingside)
+    {
+        if (color == PieceColor.White)
+        {
+            if (isKingside)
+                _whiteKingsideRookMoved = true;
+            else
+                _whiteQueensideRookMoved = true;
+        }
+        else
+        {
+            if (isKingside)
+                _blackKingsideRookMoved = true;
+            else
+                _blackQueensideRookMoved = true;
+        }
+    }
+
+    private bool IsCastlingPathClear(
+        Position from,
+        Position to,
+        Position kingStart,
+        Position rookStart)
+    {
+        foreach (var pos in GetPositionsBetweenInclusive(from, to))
+        {
+            if (pos == kingStart || pos == rookStart)
+                continue;
+
+            if (_game.Board.GetPiece(pos) is not null)
+                return false;
+        }
+
+        return true;
+    }
+
+    private IEnumerable<Position> GetPositionsBetweenInclusive(Position from, Position to)
+    {
+        int rowStep = Math.Sign(to.Row - from.Row);
+        int colStep = Math.Sign(to.Col - from.Col);
+
+        int row = from.Row;
+        int col = from.Col;
+
+        while (true)
+        {
+            yield return new Position(row, col);
+
+            if (row == to.Row && col == to.Col)
+                break;
+
+            row += rowStep;
+            col += colStep;
+        }
+    }
+
+    private bool IsKingSafeOnCastlingSquare(
+        Position kingStart,
+        Position rookStart,
+        Position testPosition,
+        PieceColor color)
+    {
+        var boardCopy = _game.Board.Clone();
+
+        boardCopy.SetPiece(kingStart, null);
+        boardCopy.SetPiece(rookStart, null);
+        boardCopy.SetPiece(testPosition, new Piece(PieceType.King, color));
+
+        return !_moveGenerator.IsKingInCheck(boardCopy, color);
     }
 }
