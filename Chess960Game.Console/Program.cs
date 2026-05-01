@@ -72,7 +72,7 @@ while (true)
         continue;
     }
 
-    var moves = moveGenerator.GenerateMovesForPiece(game.Board, from);
+    var moves = moveGenerator.GenerateLegalMovesForPiece(game.Board, from);
 
     var selectedMove = moves.FirstOrDefault(m => m.To == to);
 
@@ -119,7 +119,7 @@ void ShowMovesFrom(Position pos)
         return;
     }
 
-    var moves = moveGenerator.GenerateMovesForPiece(game.Board, pos);
+    var moves = moveGenerator.GenerateLegalMovesForPiece(game.Board, pos);
 
     Console.Clear();
     Console.WriteLine(game.Board.ToPrettyString());

@@ -7,9 +7,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System.Collections.Generic;
-using System.IO.Pipelines;
 using System.Linq;
-
 
 namespace Chess960Game.Desktop;
 
@@ -26,6 +24,16 @@ public class Game1 : Game
     private MouseState _previousMouseState;
     private Position? _selectedPosition;
     private List<Move> _selectedMoves = new();
+
+    private bool _waitingForPromotion = false;
+    private Position? _promotionFrom;
+    private Position? _promotionTo;
+    private PieceColor? _promotionColor;
+
+    private readonly List<(Rectangle Rect, PieceType Type, string Label)> _promotionButtons = new();
+
+    private string _statusText = "";
+    private bool _gameOver = false;
 
     private const int TileSize = 80;
     private const int Padding = 40;
@@ -51,6 +59,8 @@ public class Game1 : Game
         _game = setupGenerator.CreateNewGame();
         _moveGenerator = new MoveGenerator();
 
+        UpdateGameStatus();
+        CreatePromotionButtons();
         base.Initialize();
     }
 
@@ -96,6 +106,8 @@ public class Game1 : Game
         DrawAvailableMoves();
         DrawPieces();
         DrawCoordinates();
+        DrawStatus();
+        DrawPromotionButtons();
 
         _spriteBatch.End();
 
@@ -104,6 +116,15 @@ public class Game1 : Game
 
     private void HandleMouseClick(int mouseX, int mouseY)
     {
+        if (_waitingForPromotion)
+        {
+            HandlePromotionButtonClick(mouseX, mouseY);
+            return;
+        }
+
+        if (_gameOver)
+            return;
+
         if (!TryGetBoardPosition(mouseX, mouseY, out var clickedPosition))
             return;
 
@@ -118,7 +139,7 @@ public class Game1 : Game
                 return;
 
             _selectedPosition = clickedPosition;
-            _selectedMoves = _moveGenerator.GenerateMovesForPiece(_game.Board, clickedPosition);
+            _selectedMoves = _moveGenerator.GenerateLegalMovesForPiece(_game.Board, clickedPosition);
             return;
         }
 
@@ -132,18 +153,35 @@ public class Game1 : Game
             return;
         }
 
-        var moves = _moveGenerator.GenerateMovesForPiece(_game.Board, from);
+        var moves = _moveGenerator.GenerateLegalMovesForPiece(_game.Board, from);
         bool canMove = moves.Any(m => m.To == clickedPosition);
 
         if (canMove)
         {
+            var selectedMove = moves.First(m => m.To == clickedPosition);
+
+            if (selectedMove.Promotion is not null)
+            {
+                var movingPiece = _game.Board.GetPiece(from);
+
+                _waitingForPromotion = true;
+                _promotionFrom = from;
+                _promotionTo = clickedPosition;
+                _promotionColor = movingPiece!.Color;
+
+                _selectedPosition = null;
+                _selectedMoves.Clear();
+
+                return;
+            }
+
             _game.Board.MovePiece(from, clickedPosition);
             _game.SwitchTurn();
+            UpdateGameStatus();
         }
 
         _selectedPosition = null;
         _selectedMoves.Clear();
-
     }
 
     private bool TryGetBoardPosition(int mouseX, int mouseY, out Position position)
@@ -164,6 +202,34 @@ public class Game1 : Game
 
         position = new Position(row, col);
         return true;
+    }
+
+    private void UpdateGameStatus()
+    {
+        var side = _game.SideToMove;
+
+        bool isInCheck = _moveGenerator.IsKingInCheck(_game.Board, side);
+        var legalMoves = _moveGenerator.GenerateAllLegalMoves(_game.Board, side);
+
+        if (isInCheck && legalMoves.Count == 0)
+        {
+            var winner = side == PieceColor.White
+                ? "Black"
+                : "White";
+
+            _statusText = $"Checkmate! {winner} wins.";
+            _gameOver = true;
+            return;
+        }
+
+        if (!isInCheck && legalMoves.Count == 0)
+        {
+            _statusText = "Stalemate! Draw.";
+            _gameOver = true;
+            return;
+        }
+
+        _statusText = "";
     }
 
     private void DrawBoard()
@@ -205,6 +271,24 @@ public class Game1 : Game
         );
 
         _spriteBatch.Draw(_pixel, rect, Color.Yellow);
+    }
+
+    private void DrawAvailableMoves()
+    {
+        foreach (var move in _selectedMoves)
+        {
+            var pos = move.To;
+
+            int centerX = Padding + pos.Col * TileSize + TileSize / 2;
+            int centerY = Padding + pos.Row * TileSize + TileSize / 2;
+
+            DrawCircle(
+                centerX,
+                centerY,
+                10,
+                new Color(60, 60, 60)
+            );
+        }
     }
 
     private void DrawPieces()
@@ -278,44 +362,37 @@ public class Game1 : Game
             _spriteBatch.DrawString(_font, number, position, Color.Black);
         }
     }
+
+    private void DrawStatus()
+    {
+        if (string.IsNullOrWhiteSpace(_statusText))
+            return;
+
+        Vector2 position = new Vector2(Padding, 8);
+
+        _spriteBatch.DrawString(
+            _font,
+            _statusText,
+            position,
+            Color.Black
+        );
+    }
+
     private void DrawOutlinedText(string text, Vector2 position, Color color)
     {
         if (color == Color.White)
         {
-            // Чёрная обводка
             _spriteBatch.DrawString(_font, text, position + new Vector2(-1, -1), Color.Black);
             _spriteBatch.DrawString(_font, text, position + new Vector2(1, -1), Color.Black);
             _spriteBatch.DrawString(_font, text, position + new Vector2(-1, 1), Color.Black);
             _spriteBatch.DrawString(_font, text, position + new Vector2(1, 1), Color.Black);
         }
 
-        // Основной текст
         _spriteBatch.DrawString(_font, text, position, color);
     }
-    private void DrawAvailableMoves()
-    {
-        foreach (var move in _selectedMoves)
-        {
-            var pos = move.To;
 
-            int centerX =
-                Padding + pos.Col * TileSize + TileSize / 2;
-
-            int centerY =
-                Padding + pos.Row * TileSize + TileSize / 2;
-
-            DrawCircle(
-                centerX,
-                centerY,
-                10,
-                new Color(60, 60, 60) // тёмно-серый
-            );
-        }
-    }
     private void DrawCircle(int centerX, int centerY, int radius, Color color)
     {
-        int diameter = radius * 2;
-
         for (int x = -radius; x <= radius; x++)
         {
             for (int y = -radius; y <= radius; y++)
@@ -330,5 +407,73 @@ public class Game1 : Game
                 }
             }
         }
+    }
+    private void CreatePromotionButtons()
+    {
+        _promotionButtons.Clear();
+
+        int x = Padding;
+        int y = 8;
+        int width = 90;
+        int height = 28;
+        int gap = 10;
+
+        _promotionButtons.Add((new Rectangle(x, y, width, height), PieceType.Queen, "Queen"));
+        _promotionButtons.Add((new Rectangle(x + (width + gap), y, width, height), PieceType.Rook, "Rook"));
+        _promotionButtons.Add((new Rectangle(x + (width + gap) * 2, y, width, height), PieceType.Bishop, "Bishop"));
+        _promotionButtons.Add((new Rectangle(x + (width + gap) * 3, y, width, height), PieceType.Knight, "Knight"));
+    }
+    private void HandlePromotionButtonClick(int mouseX, int mouseY)
+    {
+        foreach (var button in _promotionButtons)
+        {
+            if (!button.Rect.Contains(mouseX, mouseY))
+                continue;
+
+            _game.Board.SetPiece(_promotionFrom!.Value, null);
+            _game.Board.SetPiece(
+                _promotionTo!.Value,
+                new Piece(button.Type, _promotionColor!.Value)
+            );
+
+            _waitingForPromotion = false;
+            _promotionFrom = null;
+            _promotionTo = null;
+            _promotionColor = null;
+            _statusText = "";
+
+            _game.SwitchTurn();
+            UpdateGameStatus();
+
+            return;
+        }
+    }
+    private void DrawPromotionButtons()
+    {
+        if (!_waitingForPromotion)
+            return;
+
+        foreach (var button in _promotionButtons)
+        {
+            _spriteBatch.Draw(_pixel, button.Rect, Color.White);
+
+            DrawRectangleBorder(button.Rect, Color.Black, 2);
+
+            Vector2 textSize = _font.MeasureString(button.Label);
+
+            Vector2 textPosition = new Vector2(
+                button.Rect.X + button.Rect.Width / 2f - textSize.X / 2f,
+                button.Rect.Y + button.Rect.Height / 2f - textSize.Y / 2f
+            );
+
+            _spriteBatch.DrawString(_font, button.Label, textPosition, Color.Black);
+        }
+    }
+    private void DrawRectangleBorder(Rectangle rect, Color color, int thickness)
+    {
+        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
+        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
+        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
+        _spriteBatch.Draw(_pixel, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
     }
 }

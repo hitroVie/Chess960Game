@@ -24,6 +24,41 @@ public sealed class MoveGenerator
         };
     }
 
+    public List<Move> GenerateLegalMovesForPiece(Board.Board board, Position from)
+    {
+        var piece = board.GetPiece(from);
+
+        if (piece is null)
+            return new List<Move>();
+
+        var pseudoMoves = GenerateMovesForPiece(board, from);
+        var legalMoves = new List<Move>();
+
+        foreach (var move in pseudoMoves)
+        {
+            var boardCopy = board.Clone();
+            boardCopy.MovePiece(move.From, move.To);
+
+            bool kingInCheck = IsKingInCheck(boardCopy, piece.Color);
+
+            if (!kingInCheck)
+                legalMoves.Add(move);
+        }
+
+        return legalMoves;
+    }
+
+    public bool IsKingInCheck(Board.Board board, PieceColor color)
+    {
+        var kingPosition = board.FindKing(color);
+
+        var enemyColor = color == PieceColor.White
+            ? PieceColor.Black
+            : PieceColor.White;
+
+        return IsSquareAttacked(board, kingPosition, enemyColor);
+    }
+
     private static readonly (int dr, int dc)[] KnightOffsets =
     {
         (-2, -1), (-2, 1),
@@ -70,7 +105,6 @@ public sealed class MoveGenerator
         foreach (var (dr, dc) in KnightOffsets)
         {
             var to = new Position(from.Row + dr, from.Col + dc);
-
             TryAddMove(board, moves, from, to, piece);
         }
 
@@ -84,7 +118,6 @@ public sealed class MoveGenerator
         foreach (var (dr, dc) in KingOffsets)
         {
             var to = new Position(from.Row + dr, from.Col + dc);
-
             TryAddMove(board, moves, from, to, piece);
         }
 
@@ -101,8 +134,8 @@ public sealed class MoveGenerator
 
         foreach (var (dr, dc) in directions)
         {
-            var row = from.Row + dr;
-            var col = from.Col + dc;
+            int row = from.Row + dr;
+            int col = from.Col + dc;
 
             while (true)
             {
@@ -119,7 +152,8 @@ public sealed class MoveGenerator
                 }
                 else
                 {
-                    if (targetPiece.Color != piece.Color)
+                    if (targetPiece.Color != piece.Color &&
+                        targetPiece.Type != PieceType.King)
                     {
                         moves.Add(new Move(
                             from,
@@ -171,6 +205,30 @@ public sealed class MoveGenerator
 
         return moves;
     }
+    public List<Move> GenerateAllLegalMoves(Board.Board board, PieceColor color)
+    {
+        var allMoves = new List<Move>();
+
+        for (int row = 0; row < 8; row++)
+        {
+            for (int col = 0; col < 8; col++)
+            {
+                var pos = new Position(row, col);
+                var piece = board.GetPiece(pos);
+
+                if (piece is null)
+                    continue;
+
+                if (piece.Color != color)
+                    continue;
+
+                var moves = GenerateLegalMovesForPiece(board, pos);
+                allMoves.AddRange(moves);
+            }
+        }
+
+        return allMoves;
+    }
 
     private void AddPawnMove(
         List<Move> moves,
@@ -181,7 +239,11 @@ public sealed class MoveGenerator
     {
         if (to.Row == promotionRow)
         {
-            moves.Add(new Move(from, to, piece.Type, Promotion: PieceType.Queen));
+            moves.Add(new Move(
+                from,
+                to,
+                piece.Type,
+                Promotion: PieceType.Queen));
         }
         else
         {
@@ -206,6 +268,9 @@ public sealed class MoveGenerator
             return;
 
         if (targetPiece.Color == piece.Color)
+            return;
+
+        if (targetPiece.Type == PieceType.King)
             return;
 
         if (to.Row == promotionRow)
@@ -247,11 +312,97 @@ public sealed class MoveGenerator
 
         if (targetPiece.Color != piece.Color)
         {
+            if (targetPiece.Type == PieceType.King)
+                return;
+
             moves.Add(new Move(
                 from,
                 to,
                 piece.Type,
                 IsCapture: true));
         }
+    }
+    private bool IsSquareAttacked(Board.Board board, Position target, PieceColor byColor)
+    {
+        for (int row = 0; row < 8; row++)
+        {
+            for (int col = 0; col < 8; col++)
+            {
+                var from = new Position(row, col);
+                var piece = board.GetPiece(from);
+
+                if (piece is null)
+                    continue;
+
+                if (piece.Color != byColor)
+                    continue;
+
+                if (AttacksSquare(board, from, piece, target))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+    private bool AttacksSquare(Board.Board board, Position from, Piece piece, Position target)
+    {
+        int dr = target.Row - from.Row;
+        int dc = target.Col - from.Col;
+
+        return piece.Type switch
+        {
+            PieceType.Knight =>
+                (Math.Abs(dr) == 2 && Math.Abs(dc) == 1) ||
+                (Math.Abs(dr) == 1 && Math.Abs(dc) == 2),
+
+            PieceType.King =>
+                Math.Abs(dr) <= 1 &&
+                Math.Abs(dc) <= 1 &&
+                (dr != 0 || dc != 0),
+
+            PieceType.Pawn =>
+                piece.Color == PieceColor.White
+                    ? dr == -1 && Math.Abs(dc) == 1
+                    : dr == 1 && Math.Abs(dc) == 1,
+
+            PieceType.Bishop =>
+                Math.Abs(dr) == Math.Abs(dc) &&
+                IsPathClear(board, from, target),
+
+            PieceType.Rook =>
+                (dr == 0 || dc == 0) &&
+                IsPathClear(board, from, target),
+
+            PieceType.Queen =>
+                (
+                    Math.Abs(dr) == Math.Abs(dc) ||
+                    dr == 0 ||
+                    dc == 0
+                ) &&
+                IsPathClear(board, from, target),
+
+            _ => false
+        };
+    }
+    private bool IsPathClear(Board.Board board, Position from, Position to)
+    {
+        int rowStep = Math.Sign(to.Row - from.Row);
+        int colStep = Math.Sign(to.Col - from.Col);
+
+        int row = from.Row + rowStep;
+        int col = from.Col + colStep;
+
+        while (row != to.Row || col != to.Col)
+        {
+            var pos = new Position(row, col);
+
+            if (board.GetPiece(pos) is not null)
+                return false;
+
+            row += rowStep;
+            col += colStep;
+        }
+
+        return true;
     }
 }
