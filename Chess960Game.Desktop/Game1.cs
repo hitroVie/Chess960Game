@@ -48,6 +48,9 @@ public class Game1 : Game
 
     private bool _blackKingsideRookMoved = false;
     private bool _blackQueensideRookMoved = false;
+
+    private PieceColor _playerColor;
+    private readonly Random _random = new();
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this);
@@ -68,8 +71,13 @@ public class Game1 : Game
         _game = setupGenerator.CreateNewGame();
         _moveGenerator = new MoveGenerator();
 
+        _playerColor = _random.Next(2) == 0
+            ? PieceColor.White
+            : PieceColor.Black;
+
         UpdateGameStatus();
         CreatePromotionButtons();
+
         base.Initialize();
     }
 
@@ -216,10 +224,10 @@ public class Game1 : Game
         if (localX >= BoardSize || localY >= BoardSize)
             return false;
 
-        int col = localX / TileSize;
-        int row = localY / TileSize;
+        int screenCol = localX / TileSize;
+        int screenRow = localY / TileSize;
 
-        position = new Position(row, col);
+        position = ToBoardPosition(screenRow, screenCol);
         return true;
     }
 
@@ -283,8 +291,8 @@ public class Game1 : Game
         var pos = _selectedPosition.Value;
 
         var rect = new Rectangle(
-            Padding + pos.Col * TileSize,
-            Padding + pos.Row * TileSize,
+            Padding + ToScreenCol(pos.Col) * TileSize,
+            Padding + ToScreenRow(pos.Row) * TileSize,
             TileSize,
             TileSize
         );
@@ -298,8 +306,8 @@ public class Game1 : Game
         {
             var pos = move.To;
 
-            int centerX = Padding + pos.Col * TileSize + TileSize / 2;
-            int centerY = Padding + pos.Row * TileSize + TileSize / 2;
+            int centerX = Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
+            int centerY = Padding + ToScreenRow(pos.Row) * TileSize + TileSize / 2;
 
             DrawCircle(
                 centerX,
@@ -325,9 +333,12 @@ public class Game1 : Game
                 string symbol = GetPieceSymbol(piece);
                 Vector2 textSize = _font.MeasureString(symbol);
 
+                int screenRow = ToScreenRow(row);
+                int screenCol = ToScreenCol(col);
+
                 Vector2 drawPosition = new Vector2(
-                    Padding + col * TileSize + TileSize / 2f - textSize.X / 2f,
-                    Padding + row * TileSize + TileSize / 2f - textSize.Y / 2f
+                    Padding + screenCol * TileSize + TileSize / 2f - textSize.X / 2f,
+                    Padding + screenRow * TileSize + TileSize / 2f - textSize.Y / 2f
                 );
 
                 Color color = piece.Color == PieceColor.White
@@ -357,7 +368,9 @@ public class Game1 : Game
     {
         for (int col = 0; col < 8; col++)
         {
-            string letter = ((char)('a' + col)).ToString();
+            string letter = _playerColor == PieceColor.White
+                ? ((char)('a' + col)).ToString()
+                : ((char)('h' - col)).ToString();
             Vector2 size = _font.MeasureString(letter);
 
             Vector2 position = new Vector2(
@@ -370,7 +383,9 @@ public class Game1 : Game
 
         for (int row = 0; row < 8; row++)
         {
-            string number = (8 - row).ToString();
+            string number = _playerColor == PieceColor.White
+                ? (8 - row).ToString()
+                : (row + 1).ToString();
             Vector2 size = _font.MeasureString(number);
 
             Vector2 position = new Vector2(
@@ -708,5 +723,27 @@ public class Game1 : Game
         boardCopy.SetPiece(testPosition, new Piece(PieceType.King, color));
 
         return !_moveGenerator.IsKingInCheck(boardCopy, color);
+    }
+
+    private int ToScreenRow(int boardRow)
+    {
+        return _playerColor == PieceColor.White
+            ? boardRow
+            : 7 - boardRow;
+    }
+
+    private int ToScreenCol(int boardCol)
+    {
+        return _playerColor == PieceColor.White
+            ? boardCol
+            : 7 - boardCol;
+    }
+
+    private Position ToBoardPosition(int screenRow, int screenCol)
+    {
+        if (_playerColor == PieceColor.White)
+            return new Position(screenRow, screenCol);
+
+        return new Position(7 - screenRow, 7 - screenCol);
     }
 }
