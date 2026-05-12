@@ -37,8 +37,8 @@ public class Game1 : Game
     private string _statusText = "";
     private bool _gameOver = false;
 
-    private const int TileSize = 80;
-    private const int Padding = 40;
+    private const int TileSize = 120;
+    private const int Padding = 60;
     private const int BoardSize = TileSize * 8;
 
     private bool _whiteKingMoved = false;
@@ -56,6 +56,8 @@ public class Game1 : Game
     private PieceColor _botColor;
     private PieceColor _playerColor;
     private readonly Random _random = new();
+
+    private readonly Dictionary<string, Texture2D> _pieceTextures = new();
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this);
@@ -117,10 +119,25 @@ public class Game1 : Game
         }
 
         _previousMouseState = mouseState;
-
+        LoadPieceTextures();
         base.Update(gameTime);
     }
+    private void LoadPieceTextures()
+    {
+        _pieceTextures["White_King"] = Content.Load<Texture2D>("Pieces/white_king");
+        _pieceTextures["White_Queen"] = Content.Load<Texture2D>("Pieces/white_queen");
+        _pieceTextures["White_Rook"] = Content.Load<Texture2D>("Pieces/white_rook");
+        _pieceTextures["White_Bishop"] = Content.Load<Texture2D>("Pieces/white_bishop");
+        _pieceTextures["White_Knight"] = Content.Load<Texture2D>("Pieces/white_knight");
+        _pieceTextures["White_Pawn"] = Content.Load<Texture2D>("Pieces/white_pawn");
 
+        _pieceTextures["Black_King"] = Content.Load<Texture2D>("Pieces/black_king");
+        _pieceTextures["Black_Queen"] = Content.Load<Texture2D>("Pieces/black_queen");
+        _pieceTextures["Black_Rook"] = Content.Load<Texture2D>("Pieces/black_rook");
+        _pieceTextures["Black_Bishop"] = Content.Load<Texture2D>("Pieces/black_bishop");
+        _pieceTextures["Black_Knight"] = Content.Load<Texture2D>("Pieces/black_knight");
+        _pieceTextures["Black_Pawn"] = Content.Load<Texture2D>("Pieces/black_pawn");
+    }
     protected override void Draw(GameTime gameTime)
     {
         GraphicsDevice.Clear(Color.Gray);
@@ -281,7 +298,7 @@ public class Game1 : Game
 
                 Color color = isLight
                     ? Color.White
-                    : new Color(120, 80, 200);
+                    : new Color(136, 94, 209);
 
                 var rect = new Rectangle(
                     Padding + col * TileSize,
@@ -342,22 +359,25 @@ public class Game1 : Game
                 if (piece is null)
                     continue;
 
-                string symbol = GetPieceSymbol(piece);
-                Vector2 textSize = _font.MeasureString(symbol);
+                string key = $"{piece.Color}_{piece.Type}";
+
+                if (!_pieceTextures.TryGetValue(key, out var texture))
+                    continue;
 
                 int screenRow = ToScreenRow(row);
                 int screenCol = ToScreenCol(col);
 
-                Vector2 drawPosition = new Vector2(
-                    Padding + screenCol * TileSize + TileSize / 2f - textSize.X / 2f,
-                    Padding + screenRow * TileSize + TileSize / 2f - textSize.Y / 2f
+                int pieceSize = 85;
+                int offset = (TileSize - pieceSize) / 2;
+
+                var destination = new Rectangle(
+                    Padding + screenCol * TileSize + offset,
+                    Padding + screenRow * TileSize + offset,
+                    pieceSize,
+                    pieceSize
                 );
 
-                Color color = piece.Color == PieceColor.White
-                    ? Color.White
-                    : Color.Black;
-
-                DrawOutlinedText(symbol, drawPosition, color);
+                _spriteBatch.Draw(texture, destination, Color.White);
             }
         }
     }
