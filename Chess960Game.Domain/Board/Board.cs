@@ -4,6 +4,23 @@ namespace Chess960Game.Domain.Board;
 
 public sealed class Board
 {
+    public IEnumerable<(Position Position, Piece Piece)> GetAllPieces()
+    {
+        for (int row = 0; row < 8; row++)
+        {
+            for (int col = 0; col < 8; col++)
+            {
+                var pos = new Position(row, col);
+                var piece = GetPiece(pos);
+
+                if (piece is not null)
+                {
+                    yield return (pos, piece);
+                }
+            }
+        }
+    }
+
     private readonly Piece?[,] _cells = new Piece?[8, 8];
 
     public Piece? GetPiece(Position pos)

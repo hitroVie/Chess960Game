@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Chess960Game.Domain.Bot;
 
 namespace Chess960Game.Desktop;
 
@@ -49,6 +50,9 @@ public class Game1 : Game
     private bool _blackKingsideRookMoved = false;
     private bool _blackQueensideRookMoved = false;
 
+    private SimpleChessBot _bot;
+    private int _fullMoveNumber = 1;
+
     private PieceColor _botColor;
     private PieceColor _playerColor;
     private readonly Random _random = new();
@@ -71,6 +75,7 @@ public class Game1 : Game
 
         _game = setupGenerator.CreateNewGame();
         _moveGenerator = new MoveGenerator();
+        _bot = new SimpleChessBot(_moveGenerator);
 
         _playerColor = _random.Next(2) == 0
             ? PieceColor.White
@@ -126,7 +131,6 @@ public class Game1 : Game
         DrawSelectedCell();
         DrawAvailableMoves();
         DrawPieces();
-        DrawCoordinates();
         DrawStatus();
         DrawPromotionButtons();
 
@@ -372,38 +376,6 @@ public class Game1 : Game
         };
     }
 
-    private void DrawCoordinates()
-    {
-        for (int col = 0; col < 8; col++)
-        {
-            string letter = _playerColor == PieceColor.White
-                ? ((char)('a' + col)).ToString()
-                : ((char)('h' - col)).ToString();
-            Vector2 size = _font.MeasureString(letter);
-
-            Vector2 position = new Vector2(
-                Padding + col * TileSize + TileSize / 2f - size.X / 2f,
-                Padding + BoardSize + 6
-            );
-
-            _spriteBatch.DrawString(_font, letter, position, Color.Black);
-        }
-
-        for (int row = 0; row < 8; row++)
-        {
-            string number = _playerColor == PieceColor.White
-                ? (8 - row).ToString()
-                : (row + 1).ToString();
-            Vector2 size = _font.MeasureString(number);
-
-            Vector2 position = new Vector2(
-                Padding - 24,
-                Padding + row * TileSize + TileSize / 2f - size.Y / 2f
-            );
-
-            _spriteBatch.DrawString(_font, number, position, Color.Black);
-        }
-    }
 
     private void DrawStatus()
     {
@@ -768,37 +740,40 @@ public class Game1 : Game
         if (_game.SideToMove != _botColor)
             return;
 
-        var legalMoves = _moveGenerator.GenerateAllLegalMoves(_game.Board, _botColor);
+        var move = _bot.ChooseMove(_game.Board, _botColor, _fullMoveNumber);
 
-        if (legalMoves.Count == 0)
+        if (move is null)
         {
             UpdateGameStatus();
             return;
         }
 
-        var move = legalMoves[_random.Next(legalMoves.Count)];
+        var selectedMove = move.Value;
 
-        var piece = _game.Board.GetPiece(move.From);
+        var piece = _game.Board.GetPiece(selectedMove.From);
 
         if (piece is null)
             return;
 
-        MarkPieceMoved(move.From, piece);
+        MarkPieceMoved(selectedMove.From, piece);
 
-        if (move.Promotion is not null)
+        if (selectedMove.Promotion is not null)
         {
-            _game.Board.SetPiece(move.From, null);
+            _game.Board.SetPiece(selectedMove.From, null);
             _game.Board.SetPiece(
-                move.To,
+                selectedMove.To,
                 new Piece(PieceType.Queen, piece.Color)
             );
         }
         else
         {
-            _game.Board.MovePiece(move.From, move.To);
+            _game.Board.MovePiece(selectedMove.From, selectedMove.To);
         }
 
         _game.SwitchTurn();
         UpdateGameStatus();
+
+        _fullMoveNumber++;
     }
+
 }
