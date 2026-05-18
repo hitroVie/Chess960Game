@@ -40,6 +40,10 @@ public class Game1 : Game
     private const int TileSize = 120;
     private const int Padding = 60;
     private const int BoardSize = TileSize * 8;
+    private const int PlatformTopHeight = 88;
+    private const int PlatformDepth = 28;
+    private const int PlatformGap = 6;
+    private const int RowStep = 105;
 
     private bool _whiteKingMoved = false;
     private bool _blackKingMoved = false;
@@ -100,6 +104,7 @@ public class Game1 : Game
         _pixel.SetData(new[] { Color.White });
 
         _font = Content.Load<SpriteFont>("DefaultFont");
+        LoadPieceTextures();
     }
 
     protected override void Update(GameTime gameTime)
@@ -119,7 +124,6 @@ public class Game1 : Game
         }
 
         _previousMouseState = mouseState;
-        LoadPieceTextures();
         base.Update(gameTime);
     }
     private void LoadPieceTextures()
@@ -250,11 +254,26 @@ public class Game1 : Game
         if (localX < 0 || localY < 0)
             return false;
 
-        if (localX >= BoardSize || localY >= BoardSize)
+        int screenCol = localX / TileSize;
+        int screenRow = localY / RowStep;
+
+        if (screenCol < 0 || screenCol >= 8)
             return false;
 
-        int screenCol = localX / TileSize;
-        int screenRow = localY / TileSize;
+        if (screenRow < 0 || screenRow >= 8)
+            return false;
+
+        int cellX = localX - screenCol * TileSize;
+        int cellY = localY - screenRow * RowStep;
+
+        bool insidePlatform =
+            cellX >= PlatformGap / 2 &&
+            cellX <= TileSize - PlatformGap / 2 &&
+            cellY >= PlatformGap / 2 &&
+            cellY <= PlatformGap / 2 + PlatformTopHeight + PlatformDepth;
+
+        if (!insidePlatform)
+            return false;
 
         position = ToBoardPosition(screenRow, screenCol);
         return true;
@@ -296,20 +315,44 @@ public class Game1 : Game
             {
                 bool isLight = (row + col) % 2 == 0;
 
-                Color color = isLight
-                    ? Color.White
-                    : new Color(136, 94, 209);
+                Color topColor = isLight
+                    ? new Color(235, 230, 245)
+                    : new Color(120, 95, 170);
 
-                var rect = new Rectangle(
-                    Padding + col * TileSize,
-                    Padding + row * TileSize,
-                    TileSize,
-                    TileSize
-                );
+                Color sideColor = isLight
+                    ? new Color(190, 185, 205)
+                    : new Color(75, 45, 130);
 
-                _spriteBatch.Draw(_pixel, rect, color);
+                int x = Padding + col * TileSize;
+                int y = Padding + row * RowStep;
+
+                DrawPlatformTile(x, y, topColor, sideColor);
             }
         }
+    }
+    private void DrawPlatformTile(int x, int y, Color topColor, Color sideColor)
+    {
+        int width = TileSize - PlatformGap;
+
+        var topRect = new Rectangle(
+            x + PlatformGap / 2,
+            y + PlatformGap / 2,
+            width,
+            PlatformTopHeight
+        );
+
+        var sideRect = new Rectangle(
+            x + PlatformGap / 2,
+            y + PlatformGap / 2 + PlatformTopHeight,
+            width,
+            PlatformDepth
+        );
+
+        _spriteBatch.Draw(_pixel, topRect, topColor);
+        _spriteBatch.Draw(_pixel, sideRect, sideColor);
+
+        DrawRectangleBorder(topRect, new Color(25, 25, 35), 2);
+        DrawRectangleBorder(sideRect, new Color(25, 25, 35), 2);
     }
 
     private void DrawSelectedCell()
@@ -319,11 +362,14 @@ public class Game1 : Game
 
         var pos = _selectedPosition.Value;
 
+        int x = Padding + ToScreenCol(pos.Col) * TileSize + PlatformGap / 2;
+        int y = Padding + ToScreenRow(pos.Row) * RowStep + PlatformGap / 2;
+
         var rect = new Rectangle(
-            Padding + ToScreenCol(pos.Col) * TileSize,
-            Padding + ToScreenRow(pos.Row) * TileSize,
-            TileSize,
-            TileSize
+            x,
+            y,
+            TileSize - PlatformGap,
+            PlatformTopHeight
         );
 
         _spriteBatch.Draw(_pixel, rect, Color.Yellow);
@@ -335,8 +381,11 @@ public class Game1 : Game
         {
             var pos = move.To;
 
-            int centerX = Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
-            int centerY = Padding + ToScreenRow(pos.Row) * TileSize + TileSize / 2;
+            int centerX =
+                Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
+
+            int centerY =
+                Padding + ToScreenRow(pos.Row) * RowStep + PlatformTopHeight / 2;
 
             DrawCircle(
                 centerX,
@@ -367,12 +416,17 @@ public class Game1 : Game
                 int screenRow = ToScreenRow(row);
                 int screenCol = ToScreenCol(col);
 
-                int pieceSize = 85;
-                int offset = (TileSize - pieceSize) / 2;
+                int pieceSize = 90;
+
+                int pieceX = Padding + screenCol * TileSize + (TileSize - pieceSize) / 2;
+
+                // низ фигуры стоит примерно в центре верхней части платформы
+                int pieceBottomY = Padding + screenRow * RowStep + PlatformGap / 2 + PlatformTopHeight / 2 + 12;
+                int pieceY = pieceBottomY - pieceSize;
 
                 var destination = new Rectangle(
-                    Padding + screenCol * TileSize + offset,
-                    Padding + screenRow * TileSize + offset,
+                    pieceX,
+                    pieceY,
                     pieceSize,
                     pieceSize
                 );
