@@ -517,17 +517,12 @@ public class Game1 : Game
 
         var pos = _selectedPosition.Value;
 
-        int x = Padding + ToScreenCol(pos.Col) * TileSize + PlatformGap / 2;
-        int y = Padding + ToScreenRow(pos.Row) * RowStep + PlatformGap / 2;
+        int centerX = Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
+        int centerY = Padding + ToScreenRow(pos.Row) * RowStep + PlatformTopHeight / 2;
 
-        var rect = new Rectangle(
-            x,
-            y,
-            TileSize - PlatformGap,
-            PlatformTopHeight
-        );
-
-        _spriteBatch.Draw(_pixel, rect, Color.Yellow);
+        DrawCircle(centerX, centerY, 44, new Color(70, 0, 120, 45));
+        DrawCircle(centerX, centerY, 34, new Color(110, 0, 180, 65));
+        DrawCircle(centerX, centerY, 24, new Color(160, 40, 255, 90));
     }
 
     private void DrawAvailableMoves()
@@ -597,13 +592,18 @@ public class Game1 : Game
         if (string.IsNullOrWhiteSpace(_statusText))
             return;
 
-        Vector2 position = new Vector2(Padding, 8);
+        Vector2 textSize = _font.MeasureString(_statusText);
+
+        Vector2 position = new Vector2(
+            _graphics.PreferredBackBufferWidth / 2f - textSize.X / 2f,
+            _graphics.PreferredBackBufferHeight - 90
+        );
 
         _spriteBatch.DrawString(
             _font,
             _statusText,
             position,
-            Color.Black
+            Color.White
         );
     }
 
