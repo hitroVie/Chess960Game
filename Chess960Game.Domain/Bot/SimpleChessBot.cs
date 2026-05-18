@@ -10,7 +10,7 @@ public sealed class SimpleChessBot
     private readonly BoardEvaluator _evaluator;
     private readonly AlphaBetaSearch _search;
 
-    private const int SearchDepth = 2;
+    private const int SearchDepth = 1;
 
     private readonly Dictionary<string, Move> _bestMoveCache = new();
 

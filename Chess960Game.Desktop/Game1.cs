@@ -192,12 +192,14 @@ public class Game1 : Game
         DrawBackground();
 
         DrawBoard();
+        DrawCoordinates();
         DrawSelectedCell();
         DrawAvailableMoves();
         DrawPieces();
         DrawMoveAnimation();
         DrawStatus();
         DrawPromotionButtons();
+
 
         _spriteBatch.End();
 
@@ -213,6 +215,40 @@ public class Game1 : Game
         );
 
         _spriteBatch.Draw(_backgroundTexture, rect, Color.White);
+    }
+    private void DrawCoordinates()
+    {
+        for (int col = 0; col < 8; col++)
+        {
+            string letter = _playerColor == PieceColor.White
+                ? ((char)('a' + col)).ToString()
+                : ((char)('h' - col)).ToString();
+
+            Vector2 size = _font.MeasureString(letter);
+
+            Vector2 position = new Vector2(
+                Padding + col * TileSize + TileSize / 2f - size.X / 2f,
+                Padding + 7 * RowStep + PlatformTopHeight + PlatformDepth + 4
+            );
+
+            _spriteBatch.DrawString(_font, letter, position, Color.White, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+        }
+
+        for (int row = 0; row < 8; row++)
+        {
+            string number = _playerColor == PieceColor.White
+                ? (8 - row).ToString()
+                : (row + 1).ToString();
+
+            Vector2 size = _font.MeasureString(number);
+
+            Vector2 position = new Vector2(
+                Padding - 28,
+                Padding + row * RowStep + PlatformTopHeight / 2f - size.Y / 2f
+            );
+
+            _spriteBatch.DrawString(_font, number, position, Color.White, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+        }
     }
     private void UpdateShockwave(GameTime gameTime)
     {
