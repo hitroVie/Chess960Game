@@ -1,4 +1,5 @@
-﻿using Chess960Game.Domain.Board;
+﻿#nullable enable
+using Chess960Game.Domain.Board;
 using Chess960Game.Domain.Game;
 using Chess960Game.Domain.Moves;
 using Chess960Game.Domain.Pieces;
@@ -63,6 +64,31 @@ public class Game1 : Game
     private readonly Random _random = new();
 
     private readonly Dictionary<string, Texture2D> _pieceTextures = new();
+    private enum MoveAnimationType
+    {
+        Normal,
+        Attack
+    }
+
+    private MoveAnimationType _animationType = MoveAnimationType.Normal;
+
+    private bool _isAnimatingMove = false;
+    private Piece? _animatedPiece;
+    private Position _animationFrom;
+    private Position _animationTo;
+    private float _animationProgress = 0f;
+
+    private float _animationArcHeight;
+    private float _animationScaleBoost;
+    private const float NormalMoveAnimationDuration = 0.28f;
+    private const float AttackMoveAnimationDuration = 0.65f;
+    private bool _isShockwaveActive = false;
+    private Position _shockwaveCenter;
+    private float _shockwaveTimer = 0f;
+    private const float ShockwaveDuration = 0.7f;
+    private bool _botMovePending = false;
+    private float _botMoveDelayTimer = 0f;
+    private const float BotMoveDelay = 0.18f;
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this);
@@ -93,7 +119,10 @@ public class Game1 : Game
 
         UpdateGameStatus();
         CreatePromotionButtons();
-        TryMakeBotMove();
+        if (_botColor == PieceColor.White)
+        {
+            ScheduleBotMove();
+        }
         base.Initialize();
     }
 
@@ -113,6 +142,16 @@ public class Game1 : Game
         if (Keyboard.GetState().IsKeyDown(Keys.Escape))
             Exit();
 
+        UpdateMoveAnimation(gameTime);
+        UpdateShockwave(gameTime);
+        UpdateBotMoveDelay(gameTime);
+
+        if (_isAnimatingMove)
+        {
+            base.Update(gameTime);
+            return;
+        }
+
         var mouseState = Mouse.GetState();
 
         bool leftClicked =
@@ -125,6 +164,7 @@ public class Game1 : Game
         }
 
         _previousMouseState = mouseState;
+
         base.Update(gameTime);
     }
     private void LoadPieceTextures()
@@ -155,6 +195,7 @@ public class Game1 : Game
         DrawSelectedCell();
         DrawAvailableMoves();
         DrawPieces();
+        DrawMoveAnimation();
         DrawStatus();
         DrawPromotionButtons();
 
@@ -173,7 +214,49 @@ public class Game1 : Game
 
         _spriteBatch.Draw(_backgroundTexture, rect, Color.White);
     }
+    private void UpdateShockwave(GameTime gameTime)
+    {
+        if (!_isShockwaveActive)
+            return;
 
+        _shockwaveTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+        if (_shockwaveTimer >= ShockwaveDuration)
+        {
+            _isShockwaveActive = false;
+            _shockwaveTimer = 0f;
+        }
+    }
+    private void StartShockwave(Position center)
+    {
+        _isShockwaveActive = true;
+        _shockwaveCenter = center;
+        _shockwaveTimer = 0f;
+    }
+    private void ScheduleBotMove()
+    {
+        _botMovePending = true;
+        _botMoveDelayTimer = 0f;
+    }
+
+    private void UpdateBotMoveDelay(GameTime gameTime)
+    {
+        if (!_botMovePending)
+            return;
+
+        if (_isAnimatingMove)
+            return;
+
+        _botMoveDelayTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+        if (_botMoveDelayTimer >= BotMoveDelay)
+        {
+            _botMovePending = false;
+            _botMoveDelayTimer = 0f;
+
+            TryMakeBotMove();
+        }
+    }
     private void HandleMouseClick(int mouseX, int mouseY)
     {
         if (_waitingForPromotion)
@@ -220,6 +303,9 @@ public class Game1 : Game
         {
             _selectedPosition = null;
             _selectedMoves.Clear();
+
+            ScheduleBotMove();
+
             return;
         }
 
@@ -245,13 +331,34 @@ public class Game1 : Game
                 return;
             }
 
+            var boardCopy = _game.Board.Clone();
+            boardCopy.MovePiece(from, clickedPosition);
+
+            var enemyColor = piece.Color == PieceColor.White
+                ? PieceColor.Black
+                : PieceColor.White;
+
+            bool givesCheck = _moveGenerator.IsKingInCheck(boardCopy, enemyColor);
+
+            var animationType = givesCheck
+                ? MoveAnimationType.Attack
+                : MoveAnimationType.Normal;
+
             MarkPieceMoved(from, piece);
 
             _game.Board.MovePiece(from, clickedPosition);
+
+            StartMoveAnimation(
+                piece,
+                from,
+                clickedPosition,
+                animationType
+            );
+
             _game.SwitchTurn();
             UpdateGameStatus();
 
-            TryMakeBotMove();
+            ScheduleBotMove();
         }
 
         _selectedPosition = null;
@@ -340,9 +447,43 @@ public class Game1 : Game
                 int x = Padding + col * TileSize;
                 int y = Padding + row * RowStep;
 
+                int waveOffset = GetShockwaveOffset(new Position(row, col));
+                y += waveOffset;
+
                 DrawPlatformTile(x, y, topColor, sideColor);
             }
         }
+    }
+    private int GetShockwaveOffset(Position position)
+    {
+        if (!_isShockwaveActive)
+            return 0;
+
+        int screenRow = ToScreenRow(position.Row);
+        int screenCol = ToScreenCol(position.Col);
+
+        int centerRow = ToScreenRow(_shockwaveCenter.Row);
+        int centerCol = ToScreenCol(_shockwaveCenter.Col);
+
+        float distance = MathF.Sqrt(
+            MathF.Pow(screenRow - centerRow, 2) +
+            MathF.Pow(screenCol - centerCol, 2)
+        );
+
+        float time = _shockwaveTimer / ShockwaveDuration;
+
+        float waveRadius = time * 6f;
+        float waveWidth = 0.9f;
+
+        float delta = MathF.Abs(distance - waveRadius);
+
+        if (delta > waveWidth)
+            return 0;
+
+        float strength = 1f - delta / waveWidth;
+        float fade = 1f - time;
+
+        return (int)(-MathF.Sin(strength * MathF.PI) * 16f * fade);
     }
     private void DrawPlatformTile(int x, int y, Color topColor, Color sideColor)
     {
@@ -422,25 +563,24 @@ public class Game1 : Game
                 if (piece is null)
                     continue;
 
+                if (_isAnimatingMove &&
+                    _animatedPiece is not null &&
+                    position == _animationTo)
+                {
+                    continue;
+                }
+
                 string key = $"{piece.Color}_{piece.Type}";
 
                 if (!_pieceTextures.TryGetValue(key, out var texture))
                     continue;
 
-                int screenRow = ToScreenRow(row);
-                int screenCol = ToScreenCol(col);
-
                 int pieceSize = 90;
-
-                int pieceX = Padding + screenCol * TileSize + (TileSize - pieceSize) / 2;
-
-                // низ фигуры стоит примерно в центре верхней части платформы
-                int pieceBottomY = Padding + screenRow * RowStep + PlatformGap / 2 + PlatformTopHeight / 2 + 12;
-                int pieceY = pieceBottomY - pieceSize;
+                Vector2 drawPosition = GetPieceDrawPosition(position, pieceSize);
 
                 var destination = new Rectangle(
-                    pieceX,
-                    pieceY,
+                    (int)drawPosition.X,
+                    (int)drawPosition.Y,
                     pieceSize,
                     pieceSize
                 );
@@ -450,19 +590,6 @@ public class Game1 : Game
         }
     }
 
-    private string GetPieceSymbol(Piece piece)
-    {
-        return piece.Type switch
-        {
-            PieceType.King => "K",
-            PieceType.Queen => "Q",
-            PieceType.Rook => "R",
-            PieceType.Bishop => "B",
-            PieceType.Knight => "N",
-            PieceType.Pawn => "P",
-            _ => "?"
-        };
-    }
 
 
     private void DrawStatus()
@@ -480,18 +607,6 @@ public class Game1 : Game
         );
     }
 
-    private void DrawOutlinedText(string text, Vector2 position, Color color)
-    {
-        if (color == Color.White)
-        {
-            _spriteBatch.DrawString(_font, text, position + new Vector2(-1, -1), Color.Black);
-            _spriteBatch.DrawString(_font, text, position + new Vector2(1, -1), Color.Black);
-            _spriteBatch.DrawString(_font, text, position + new Vector2(-1, 1), Color.Black);
-            _spriteBatch.DrawString(_font, text, position + new Vector2(1, 1), Color.Black);
-        }
-
-        _spriteBatch.DrawString(_font, text, position, color);
-    }
 
     private void DrawCircle(int centerX, int centerY, int radius, Color color)
     {
@@ -547,7 +662,7 @@ public class Game1 : Game
             _game.SwitchTurn();
             UpdateGameStatus();
 
-            TryMakeBotMove();
+            ScheduleBotMove();
 
             return;
         }
@@ -816,7 +931,124 @@ public class Game1 : Game
 
         return new Position(7 - screenRow, 7 - screenCol);
     }
+    private void StartMoveAnimation(Piece piece, Position from, Position to, MoveAnimationType type = MoveAnimationType.Normal)
+    {
+        _isAnimatingMove = true;
+        _animatedPiece = piece;
+        _animationFrom = from;
+        _animationTo = to;
+        _animationProgress = 0f;
+        _animationType = type;
 
+        if (type == MoveAnimationType.Attack)
+        {
+            _animationArcHeight = 180;
+            _animationScaleBoost = 0.45f;
+        }
+        else
+        {
+            _animationArcHeight = 65;
+            _animationScaleBoost = 0.05f;
+        }
+    }
+    private Vector2 GetPieceDrawPosition(Position position, int pieceSize)
+    {
+        int screenRow = ToScreenRow(position.Row);
+        int screenCol = ToScreenCol(position.Col);
+
+        int pieceX = Padding + screenCol * TileSize + (TileSize - pieceSize) / 2;
+
+        int waveOffset = GetShockwaveOffset(position);
+
+        int pieceBottomY =
+            Padding +
+            screenRow * RowStep +
+            PlatformGap / 2 +
+            PlatformTopHeight / 2 +
+            18 +
+            waveOffset;
+
+        int pieceY = pieceBottomY - pieceSize;
+
+        return new Vector2(pieceX, pieceY);
+    }
+
+    private void UpdateMoveAnimation(GameTime gameTime)
+    {
+        if (!_isAnimatingMove)
+            return;
+
+        float duration = _animationType == MoveAnimationType.Attack
+            ? AttackMoveAnimationDuration
+            : NormalMoveAnimationDuration;
+
+        _animationProgress += (float)gameTime.ElapsedGameTime.TotalSeconds / duration;
+
+        if (_animationProgress >= 1f)
+        {
+            _animationProgress = 1f;
+
+            if (_animationType == MoveAnimationType.Attack)
+            {
+                StartShockwave(_animationTo);
+            }
+
+            _isAnimatingMove = false;
+            _animatedPiece = null;
+        }
+    }
+    private void DrawMoveAnimation()
+    {
+        if (!_isAnimatingMove || _animatedPiece is null)
+            return;
+
+        string key = $"{_animatedPiece.Color}_{_animatedPiece.Type}";
+
+        if (!_pieceTextures.TryGetValue(key, out var texture))
+            return;
+
+        int baseSize = 90;
+
+        Vector2 from = GetPieceDrawPosition(_animationFrom, baseSize);
+        Vector2 to = GetPieceDrawPosition(_animationTo, baseSize);
+
+        float t = SmoothStep(_animationProgress);
+        Vector2 position = Vector2.Lerp(from, to, t);
+
+        float scale;
+
+        if (_animationType == MoveAnimationType.Attack)
+        {
+            float arc = MathF.Sin(t * MathF.PI) * 180f;
+            position.Y -= arc;
+
+            scale = 1f + MathF.Sin(t * MathF.PI) * 0.45f;
+        }
+        else
+        {
+            float arc = MathF.Sin(t * MathF.PI) * _animationArcHeight;
+            position.Y -= arc;
+
+            scale = 1f + MathF.Sin(t * MathF.PI) * _animationScaleBoost;
+        }
+
+
+        int size = (int)(baseSize * scale);
+
+        var destination = new Rectangle(
+            (int)(position.X - (size - baseSize) / 2f),
+            (int)(position.Y - (size - baseSize) / 2f),
+            size,
+            size
+        );
+
+        _spriteBatch.Draw(texture, destination, Color.White);
+    }
+
+    private float SmoothStep(float t)
+    {
+        return t * t * (3f - 2f * t);
+    }
     private void TryMakeBotMove()
     {
         if (_gameOver)
@@ -843,6 +1075,31 @@ public class Game1 : Game
         if (piece is null)
             return;
 
+        var boardCopy = _game.Board.Clone();
+
+        if (selectedMove.Promotion is not null)
+        {
+            boardCopy.SetPiece(selectedMove.From, null);
+            boardCopy.SetPiece(
+                selectedMove.To,
+                new Piece(PieceType.Queen, piece.Color)
+            );
+        }
+        else
+        {
+            boardCopy.MovePiece(selectedMove.From, selectedMove.To);
+        }
+
+        var enemyColor = piece.Color == PieceColor.White
+            ? PieceColor.Black
+            : PieceColor.White;
+
+        bool givesCheck = _moveGenerator.IsKingInCheck(boardCopy, enemyColor);
+
+        var animationType = givesCheck
+            ? MoveAnimationType.Attack
+            : MoveAnimationType.Normal;
+
         MarkPieceMoved(selectedMove.From, piece);
 
         if (selectedMove.Promotion is not null)
@@ -852,10 +1109,24 @@ public class Game1 : Game
                 selectedMove.To,
                 new Piece(PieceType.Queen, piece.Color)
             );
+
+            StartMoveAnimation(
+                new Piece(PieceType.Queen, piece.Color),
+                selectedMove.From,
+                selectedMove.To,
+                animationType
+            );
         }
         else
         {
             _game.Board.MovePiece(selectedMove.From, selectedMove.To);
+
+            StartMoveAnimation(
+                piece,
+                selectedMove.From,
+                selectedMove.To,
+                animationType
+            );
         }
 
         _game.SwitchTurn();
