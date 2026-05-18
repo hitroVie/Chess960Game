@@ -76,3 +76,8 @@
 /importer:TextureImporter
 /processor:TextureProcessor
 /build:Pieces/black_pawn.png
+
+#begin Backgrounds/background.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/build:Backgrounds/background.png

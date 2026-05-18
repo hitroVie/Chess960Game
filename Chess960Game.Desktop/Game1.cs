@@ -18,6 +18,7 @@ public class Game1 : Game
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
     private Texture2D _pixel;
+    private Texture2D _backgroundTexture;
     private SpriteFont _font;
 
     private GameState _game;
@@ -99,7 +100,7 @@ public class Game1 : Game
     protected override void LoadContent()
     {
         _spriteBatch = new SpriteBatch(GraphicsDevice);
-
+        _backgroundTexture = Content.Load<Texture2D>("Backgrounds/background");
         _pixel = new Texture2D(GraphicsDevice, 1, 1);
         _pixel.SetData(new[] { Color.White });
 
@@ -144,9 +145,11 @@ public class Game1 : Game
     }
     protected override void Draw(GameTime gameTime)
     {
-        GraphicsDevice.Clear(Color.Gray);
+        GraphicsDevice.Clear(Color.Black);
 
         _spriteBatch.Begin();
+
+        DrawBackground();
 
         DrawBoard();
         DrawSelectedCell();
@@ -158,6 +161,17 @@ public class Game1 : Game
         _spriteBatch.End();
 
         base.Draw(gameTime);
+    }
+    private void DrawBackground()
+    {
+        var rect = new Rectangle(
+            0,
+            0,
+            _graphics.PreferredBackBufferWidth,
+            _graphics.PreferredBackBufferHeight
+        );
+
+        _spriteBatch.Draw(_backgroundTexture, rect, Color.White);
     }
 
     private void HandleMouseClick(int mouseX, int mouseY)
