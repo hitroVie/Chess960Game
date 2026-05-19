@@ -13,11 +13,17 @@ using System.Linq;
 using Chess960Game.Domain.Bot;
 using Chess960Game.Desktop.Animation;
 using Chess960Game.Desktop.Rendering;
+using Chess960Game.Desktop.Menu;
 
 namespace Chess960Game.Desktop;
 
 public class Game1 : Game
 {
+    private enum GameScreenState
+    {
+        MainMenu,
+        Playing
+    }
     // MonoGame resources
     private GraphicsDeviceManager _graphics;
     private SpriteBatch _spriteBatch;
@@ -35,6 +41,9 @@ public class Game1 : Game
 
     private string _statusText = "";
     private bool _gameOver = false;
+
+    private GameScreenState _screenState = GameScreenState.MainMenu;
+    private readonly MainMenu _mainMenu = new();
 
     // Promotion state
     private bool _waitingForPromotion = false;
@@ -114,10 +123,6 @@ public class Game1 : Game
             : PieceColor.White;
 
         UpdateGameStatus();
-        if (_botColor == PieceColor.White)
-        {
-            ScheduleBotMove();
-        }
         base.Initialize();
     }
 
@@ -136,6 +141,31 @@ public class Game1 : Game
     {
         if (Keyboard.GetState().IsKeyDown(Keys.Escape))
             Exit();
+        if (_screenState == GameScreenState.MainMenu)
+        {
+            var menuMouseState = Mouse.GetState();
+
+            var menuResult = _mainMenu.Update(
+                gameTime,
+                menuMouseState,
+                _previousMouseState
+            );
+
+            if (menuResult != MainMenuResult.None)
+            {
+                _screenState = GameScreenState.Playing;
+
+                if (_botColor == PieceColor.White)
+                {
+                    ScheduleBotMove();
+                }
+            }
+
+            _previousMouseState = menuMouseState;
+
+            base.Update(gameTime);
+            return;
+        }
 
         UpdateMoveAnimation(gameTime);
         UpdateShockwave(gameTime);
@@ -178,6 +208,21 @@ public class Game1 : Game
         _spriteBatch.Begin();
 
         DrawBackground();
+
+        if (_screenState == GameScreenState.MainMenu)
+        {
+            _mainMenu.Draw(
+                _spriteBatch,
+                _pixel,
+                _font,
+                _boardRenderer,
+                _pieceRenderer
+            );
+
+            _spriteBatch.End();
+            base.Draw(gameTime);
+            return;
+        }
 
         _boardRenderer.DrawBoard(_spriteBatch, _pixel, GetShockwaveOffset);
         _boardRenderer.DrawCoordinates(_spriteBatch, _font, _playerColor);

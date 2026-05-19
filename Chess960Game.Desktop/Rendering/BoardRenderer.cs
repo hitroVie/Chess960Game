@@ -20,13 +20,32 @@ public class BoardRenderer
     private const int RowStep = 105;
 
     public void DrawBoard(
-        SpriteBatch spriteBatch,
-        Texture2D pixel,
-        Func<Position, int> getShockwaveOffset)
+    SpriteBatch spriteBatch,
+    Texture2D pixel,
+    Func<Position, int> getShockwaveOffset)
     {
-        for (int row = 0; row < 8; row++)
+        DrawBoardArea(
+            spriteBatch,
+            pixel,
+            8,
+            8,
+            Padding,
+            Padding,
+            getShockwaveOffset
+        );
+    }
+    public void DrawBoardArea(
+    SpriteBatch spriteBatch,
+    Texture2D pixel,
+    int rows,
+    int cols,
+    int startX,
+    int startY,
+    Func<Position, int>? getShockwaveOffset = null)
+    {
+        for (int row = 0; row < rows; row++)
         {
-            for (int col = 0; col < 8; col++)
+            for (int col = 0; col < cols; col++)
             {
                 bool isLight = (row + col) % 2 == 0;
 
@@ -38,16 +57,16 @@ public class BoardRenderer
                     ? new Color(190, 185, 205)
                     : new Color(75, 45, 130);
 
-                int x = Padding + col * TileSize;
-                int y = Padding + row * RowStep;
+                int x = startX + col * TileSize;
+                int y = startY + row * RowStep;
 
-                y += getShockwaveOffset(new Position(row, col));
+                if (getShockwaveOffset is not null)
+                    y += getShockwaveOffset(new Position(row, col));
 
                 DrawPlatformTile(spriteBatch, pixel, x, y, topColor, sideColor);
             }
         }
     }
-
     public void DrawCoordinates(
         SpriteBatch spriteBatch,
         SpriteFont font,
