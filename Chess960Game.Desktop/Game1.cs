@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Chess960Game.Domain.Bot;
+using Chess960Game.Desktop.Animation;
 
 namespace Chess960Game.Desktop;
 
@@ -76,25 +77,8 @@ public class Game1 : Game
     private float _botMoveDelayTimer = 0f;
     private const float BotMoveDelay = 0.18f;
 
-    // Move animation
-    private enum MoveAnimationType
-    {
-        Normal,
-        Attack
-    }
-    private MoveAnimationType _animationType = MoveAnimationType.Normal;
-
-    private bool _isAnimatingMove = false;
-    private Piece? _animatedPiece;
-    private Position _animationFrom;
-    private Position _animationTo;
-    private float _animationProgress = 0f;
-
-    private float _animationArcHeight;
-    private float _animationScaleBoost;
-
-    private const float NormalMoveAnimationDuration = 0.28f;
-    private const float AttackMoveAnimationDuration = 0.65f;
+    // Different move animation styles
+    private readonly MoveAnimation _moveAnimation = new();
 
     // Shockwave animation
     private bool _isShockwaveActive = false;
@@ -180,7 +164,7 @@ public class Game1 : Game
             return;
         }
 
-        if (_isAnimatingMove)
+        if (_moveAnimation.IsActive)
         {
             _previousMouseState = Mouse.GetState();
 
@@ -573,9 +557,9 @@ public class Game1 : Game
                 if (piece is null)
                     continue;
 
-                if (_isAnimatingMove &&
-                    _animatedPiece is not null &&
-                    position == _animationTo)
+                if (_moveAnimation.IsActive &&
+                    _moveAnimation.Piece is not null &&
+                    position == _moveAnimation.To)
                 {
                     continue;
                 }
@@ -871,7 +855,7 @@ public class Game1 : Game
         if (!_botMovePending)
             return;
 
-        if (_isAnimatingMove)
+        if (_moveAnimation.IsActive)
             return;
 
         _botMoveDelayTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -973,67 +957,40 @@ public class Game1 : Game
     //Animation
     private void StartMoveAnimation(Piece piece, Position from, Position to, MoveAnimationType type = MoveAnimationType.Normal)
     {
-        _isAnimatingMove = true;
-        _animatedPiece = piece;
-        _animationFrom = from;
-        _animationTo = to;
-        _animationProgress = 0f;
-        _animationType = type;
-
-        if (type == MoveAnimationType.Attack)
-        {
-            _animationArcHeight = 180;
-            _animationScaleBoost = 0.45f;
-        }
-        else
-        {
-            _animationArcHeight = 65;
-            _animationScaleBoost = 0.05f;
-        }
+        _moveAnimation.Start(piece, from, to, type);
     }
     private void UpdateMoveAnimation(GameTime gameTime)
     {
-        if (!_isAnimatingMove)
-            return;
+        bool finishedAttack = _moveAnimation.Update(
+            (float)gameTime.ElapsedGameTime.TotalSeconds
+        );
 
-        float duration = _animationType == MoveAnimationType.Attack
-            ? AttackMoveAnimationDuration
-            : NormalMoveAnimationDuration;
-
-        _animationProgress += (float)gameTime.ElapsedGameTime.TotalSeconds / duration;
-
-        if (_animationProgress >= 1f)
+        if (finishedAttack)
         {
-            _animationProgress = 1f;
-
-            if (_animationType == MoveAnimationType.Attack)
-            {
-                StartShockwave(_animationTo);
-            }
-
-            _isAnimatingMove = false;
-            _animatedPiece = null;
+            StartShockwave(_moveAnimation.To);
         }
     }
     private void DrawMoveAnimation()
     {
-        if (!_isAnimatingMove || _animatedPiece is null)
+        if (!_moveAnimation.IsActive || _moveAnimation.Piece is null)
             return;
 
-        if (!_pieceTextures.TryGetValue((_animatedPiece.Color, _animatedPiece.Type), out var texture))
+        var animatedPiece = _moveAnimation.Piece;
+
+        if (!_pieceTextures.TryGetValue((animatedPiece.Color, animatedPiece.Type), out var texture))
             return;
 
         int baseSize = PieceSize;
 
-        Vector2 from = GetPieceDrawPosition(_animationFrom, baseSize);
-        Vector2 to = GetPieceDrawPosition(_animationTo, baseSize);
+        Vector2 from = GetPieceDrawPosition(_moveAnimation.From, baseSize);
+        Vector2 to = GetPieceDrawPosition(_moveAnimation.To, baseSize);
 
-        float t = SmoothStep(_animationProgress);
+        float t = SmoothStep(_moveAnimation.Progress);
         Vector2 position = Vector2.Lerp(from, to, t);
 
         float scale;
 
-        if (_animationType == MoveAnimationType.Attack)
+        if (_moveAnimation.Type == MoveAnimationType.Attack)
         {
             float arc = MathF.Sin(t * MathF.PI) * 180f;
             position.Y -= arc;
@@ -1042,12 +999,11 @@ public class Game1 : Game
         }
         else
         {
-            float arc = MathF.Sin(t * MathF.PI) * _animationArcHeight;
+            float arc = MathF.Sin(t * MathF.PI) * _moveAnimation.ArcHeight;
             position.Y -= arc;
 
-            scale = 1f + MathF.Sin(t * MathF.PI) * _animationScaleBoost;
+            scale = 1f + MathF.Sin(t * MathF.PI) * _moveAnimation.ScaleBoost;
         }
-
 
         int size = (int)(baseSize * scale);
 
