@@ -1,6 +1,7 @@
 using Chess960Game.Domain.Board;
 using Chess960Game.Domain.Moves;
 using Chess960Game.Domain.Pieces;
+using System.Collections.Concurrent;
 using System.Text;
 
 namespace Chess960Game.Domain.Bot;
@@ -10,9 +11,9 @@ public sealed class SimpleChessBot
     private readonly BoardEvaluator _evaluator;
     private readonly AlphaBetaSearch _search;
 
-    private const int SearchDepth = 1;
+    private const int SearchDepth = 3;
 
-    private readonly Dictionary<string, Move> _bestMoveCache = new();
+    private readonly ConcurrentDictionary<string, Move> _bestMoveCache = new();
 
     public SimpleChessBot(MoveGenerator moveGenerator)
     {
@@ -29,7 +30,7 @@ public sealed class SimpleChessBot
             return cachedMove;
         }
 
-        var bestMove = _search.FindBestMove(board, botColor, SearchDepth);
+        var bestMove = _search.FindBestMoveParallel(board, botColor, SearchDepth);
 
         if (bestMove is not null)
         {

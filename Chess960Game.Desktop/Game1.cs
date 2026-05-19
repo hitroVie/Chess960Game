@@ -79,7 +79,7 @@ public class Game1 : Game
     private float _botMoveDelayTimer = 0f;
     private const float BotMoveDelay = 0.18f;
 
-    // Different move animation styles
+    // Animation
     private readonly MoveAnimation _moveAnimation = new();
 
     // Shockwave animation
@@ -431,7 +431,6 @@ public class Game1 : Game
 
         _spriteBatch.Draw(_backgroundTexture, rect, Color.White);
     }
-
 
     private void DrawStatus()
     {
@@ -803,8 +802,6 @@ public class Game1 : Game
     {
         if (!_moveAnimation.IsActive || _moveAnimation.Piece is null)
             return;
-
-        var animatedPiece = _moveAnimation.Piece;
 
         if (!_pieceRenderer.TryGetTexture(_moveAnimation.Piece, out var texture))
             return;

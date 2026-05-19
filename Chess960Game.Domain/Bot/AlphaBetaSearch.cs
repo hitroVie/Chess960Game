@@ -74,6 +74,74 @@ public sealed class AlphaBetaSearch
 
         return bestMove;
     }
+    public Move? FindBestMoveParallel(Board.Board board, PieceColor sideToMove, int depth)
+    {
+        var moves = _moveGenerator.GenerateAllLegalMoves(board, sideToMove);
+
+        if (moves.Count == 0)
+            return null;
+
+        moves = OrderMoves(board, moves, sideToMove);
+
+        object locker = new();
+
+        Move bestMove = moves[0];
+
+        int bestScore = sideToMove == PieceColor.White
+            ? int.MinValue
+            : int.MaxValue;
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)
+        };
+
+        Parallel.ForEach(moves, parallelOptions, move =>
+        {
+            var boardCopy = board.Clone();
+
+            ApplyMove(boardCopy, move, sideToMove);
+
+            var nextSide = Opposite(sideToMove);
+
+            int score = AlphaBeta(
+                boardCopy,
+                nextSide,
+                depth - 1,
+                int.MinValue + 1,
+                int.MaxValue - 1);
+
+            lock (locker)
+            {
+                if (sideToMove == PieceColor.White)
+                {
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                    else if (score == bestScore && Random.Shared.Next(2) == 0)
+                    {
+                        bestMove = move;
+                    }
+                }
+                else
+                {
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                    else if (score == bestScore && Random.Shared.Next(2) == 0)
+                    {
+                        bestMove = move;
+                    }
+                }
+            }
+        });
+
+        return bestMove;
+    }
 
     private int AlphaBeta(
         Board.Board board,
