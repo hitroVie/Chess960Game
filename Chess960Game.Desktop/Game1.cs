@@ -146,8 +146,17 @@ public class Game1 : Game
         UpdateShockwave(gameTime);
         UpdateBotMoveDelay(gameTime);
 
+        if (_waitingForPromotion)
+        {
+            HandlePromotionKeyboardInput();
+            base.Update(gameTime);
+            return;
+        }
+
         if (_isAnimatingMove)
         {
+            _previousMouseState = Mouse.GetState();
+
             base.Update(gameTime);
             return;
         }
@@ -166,6 +175,44 @@ public class Game1 : Game
         _previousMouseState = mouseState;
 
         base.Update(gameTime);
+    }
+    private void HandlePromotionKeyboardInput()
+    {
+        var keyboard = Keyboard.GetState();
+
+        if (keyboard.IsKeyDown(Keys.Q))
+            CompletePromotion(PieceType.Queen);
+
+        if (keyboard.IsKeyDown(Keys.R))
+            CompletePromotion(PieceType.Rook);
+
+        if (keyboard.IsKeyDown(Keys.B))
+            CompletePromotion(PieceType.Bishop);
+
+        if (keyboard.IsKeyDown(Keys.N))
+            CompletePromotion(PieceType.Knight);
+    }
+    private void CompletePromotion(PieceType pieceType)
+    {
+        if (_promotionFrom is null || _promotionTo is null || _promotionColor is null)
+            return;
+
+        _game.Board.SetPiece(_promotionFrom.Value, null);
+
+        _game.Board.SetPiece(
+            _promotionTo.Value,
+            new Piece(pieceType, _promotionColor.Value)
+        );
+
+        _waitingForPromotion = false;
+        _promotionFrom = null;
+        _promotionTo = null;
+        _promotionColor = null;
+
+        _game.SwitchTurn();
+        UpdateGameStatus();
+
+        ScheduleBotMove();
     }
     private void LoadPieceTextures()
     {
@@ -198,7 +245,6 @@ public class Game1 : Game
         DrawPieces();
         DrawMoveAnimation();
         DrawStatus();
-        DrawPromotionButtons();
 
 
         _spriteBatch.End();
@@ -625,10 +671,16 @@ public class Game1 : Game
 
     private void DrawStatus()
     {
-        if (string.IsNullOrWhiteSpace(_statusText))
+        string text = _waitingForPromotion
+            ? "Promotion: Q Queen | R Rook | B Bishop | N Knight"
+            : _statusText;
+
+        if (string.IsNullOrWhiteSpace(text))
             return;
 
-        Vector2 textSize = _font.MeasureString(_statusText);
+        float scale = 0.6f;
+
+        Vector2 textSize = _font.MeasureString(text) * scale;
 
         Vector2 position = new Vector2(
             _graphics.PreferredBackBufferWidth / 2f - textSize.X / 2f,
@@ -637,9 +689,14 @@ public class Game1 : Game
 
         _spriteBatch.DrawString(
             _font,
-            _statusText,
+            text,
             position,
-            Color.White
+            Color.White,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            0f
         );
     }
 
