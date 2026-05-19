@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Chess960Game.Domain.Bot;
 using Chess960Game.Desktop.Animation;
+using Chess960Game.Desktop.Rendering;
 
 namespace Chess960Game.Desktop;
 
@@ -43,6 +44,7 @@ public class Game1 : Game
 
 
     // Board layout
+    private readonly BoardRenderer _boardRenderer = new();
     private const int TileSize = 120;
     private const int Padding = 60;
     private const int BoardSize = TileSize * 8;
@@ -53,8 +55,8 @@ public class Game1 : Game
     private const int RowStep = 105;
 
     // Piece rendering
+    private readonly PieceRenderer _pieceRenderer = new();
     private const int PieceSize = 90;
-    private readonly Dictionary<(PieceColor, PieceType), Texture2D> _pieceTextures = new();
 
     // Castling state
     private bool _whiteKingMoved = false;
@@ -81,10 +83,7 @@ public class Game1 : Game
     private readonly MoveAnimation _moveAnimation = new();
 
     // Shockwave animation
-    private bool _isShockwaveActive = false;
-    private Position _shockwaveCenter;
-    private float _shockwaveTimer = 0f;
-    private const float ShockwaveDuration = 0.7f;
+    private readonly ShockwaveEffect _shockwave = new();
 
     public Game1()
     {
@@ -130,24 +129,9 @@ public class Game1 : Game
         _pixel.SetData(new[] { Color.White });
 
         _font = Content.Load<SpriteFont>("DefaultFont");
-        LoadPieceTextures();
+        _pieceRenderer.LoadContent(Content);
     }
-    private void LoadPieceTextures()
-    {
-        _pieceTextures[(PieceColor.White, PieceType.King)] = Content.Load<Texture2D>("Pieces/white_king");
-        _pieceTextures[(PieceColor.White, PieceType.Queen)] = Content.Load<Texture2D>("Pieces/white_queen");
-        _pieceTextures[(PieceColor.White, PieceType.Rook)] = Content.Load<Texture2D>("Pieces/white_rook");
-        _pieceTextures[(PieceColor.White, PieceType.Bishop)] = Content.Load<Texture2D>("Pieces/white_bishop");
-        _pieceTextures[(PieceColor.White, PieceType.Knight)] = Content.Load<Texture2D>("Pieces/white_knight");
-        _pieceTextures[(PieceColor.White, PieceType.Pawn)] = Content.Load<Texture2D>("Pieces/white_pawn");
-
-        _pieceTextures[(PieceColor.Black, PieceType.King)] = Content.Load<Texture2D>("Pieces/black_king");
-        _pieceTextures[(PieceColor.Black, PieceType.Queen)] = Content.Load<Texture2D>("Pieces/black_queen");
-        _pieceTextures[(PieceColor.Black, PieceType.Rook)] = Content.Load<Texture2D>("Pieces/black_rook");
-        _pieceTextures[(PieceColor.Black, PieceType.Bishop)] = Content.Load<Texture2D>("Pieces/black_bishop");
-        _pieceTextures[(PieceColor.Black, PieceType.Knight)] = Content.Load<Texture2D>("Pieces/black_knight");
-        _pieceTextures[(PieceColor.Black, PieceType.Pawn)] = Content.Load<Texture2D>("Pieces/black_pawn");
-    }
+ 
     protected override void Update(GameTime gameTime)
     {
         if (Keyboard.GetState().IsKeyDown(Keys.Escape))
@@ -195,11 +179,31 @@ public class Game1 : Game
 
         DrawBackground();
 
-        DrawBoard();
-        DrawCoordinates();
-        DrawSelectedCell();
-        DrawAvailableMoves();
-        DrawPieces();
+        _boardRenderer.DrawBoard(_spriteBatch, _pixel, GetShockwaveOffset);
+        _boardRenderer.DrawCoordinates(_spriteBatch, _font, _playerColor);
+        _boardRenderer.DrawSelectedCell(
+            _spriteBatch,
+            _pixel,
+            _selectedPosition,
+            ToScreenRow,
+            ToScreenCol
+        );
+        _boardRenderer.DrawAvailableMoves(
+            _spriteBatch,
+            _pixel,
+            _selectedMoves,
+            ToScreenRow,
+            ToScreenCol
+        );
+        _pieceRenderer.DrawPieces(
+            _spriteBatch,
+            _game.Board,
+            PieceSize,
+            GetPieceDrawPosition,
+            _moveAnimation.IsActive,
+            _moveAnimation.To,
+            _moveAnimation.Piece
+        );
         DrawMoveAnimation();
         DrawStatus();
 
@@ -427,160 +431,8 @@ public class Game1 : Game
 
         _spriteBatch.Draw(_backgroundTexture, rect, Color.White);
     }
-    private void DrawBoard()
-    {
-        for (int row = 0; row < 8; row++)
-        {
-            for (int col = 0; col < 8; col++)
-            {
-                bool isLight = (row + col) % 2 == 0;
 
-                Color topColor = isLight
-                    ? new Color(235, 230, 245)
-                    : new Color(120, 95, 170);
 
-                Color sideColor = isLight
-                    ? new Color(190, 185, 205)
-                    : new Color(75, 45, 130);
-
-                int x = Padding + col * TileSize;
-                int y = Padding + row * RowStep;
-
-                int waveOffset = GetShockwaveOffset(new Position(row, col));
-                y += waveOffset;
-
-                DrawPlatformTile(x, y, topColor, sideColor);
-            }
-        }
-    }
-    private void DrawPlatformTile(int x, int y, Color topColor, Color sideColor)
-    {
-        int width = TileSize - PlatformGap;
-
-        var topRect = new Rectangle(
-            x + PlatformGap / 2,
-            y + PlatformGap / 2,
-            width,
-            PlatformTopHeight
-        );
-
-        var sideRect = new Rectangle(
-            x + PlatformGap / 2,
-            y + PlatformGap / 2 + PlatformTopHeight,
-            width,
-            PlatformDepth
-        );
-
-        _spriteBatch.Draw(_pixel, topRect, topColor);
-        _spriteBatch.Draw(_pixel, sideRect, sideColor);
-
-        DrawRectangleBorder(topRect, new Color(25, 25, 35), 2);
-        DrawRectangleBorder(sideRect, new Color(25, 25, 35), 2);
-    }
-    private void DrawCoordinates()
-    {
-        for (int col = 0; col < 8; col++)
-        {
-            string letter = _playerColor == PieceColor.White
-                ? ((char)('a' + col)).ToString()
-                : ((char)('h' - col)).ToString();
-
-            Vector2 size = _font.MeasureString(letter);
-
-            Vector2 position = new Vector2(
-                Padding + col * TileSize + TileSize / 2f - size.X / 2f,
-                Padding + 7 * RowStep + PlatformTopHeight + PlatformDepth + 4
-            );
-
-            _spriteBatch.DrawString(_font, letter, position, Color.White, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
-        }
-
-        for (int row = 0; row < 8; row++)
-        {
-            string number = _playerColor == PieceColor.White
-                ? (8 - row).ToString()
-                : (row + 1).ToString();
-
-            Vector2 size = _font.MeasureString(number);
-
-            Vector2 position = new Vector2(
-                Padding - 28,
-                Padding + row * RowStep + PlatformTopHeight / 2f - size.Y / 2f
-            );
-
-            _spriteBatch.DrawString(_font, number, position, Color.White, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
-        }
-    }
-    private void DrawSelectedCell()
-    {
-        if (_selectedPosition is null)
-            return;
-
-        var pos = _selectedPosition.Value;
-
-        int centerX = Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
-        int centerY = Padding + ToScreenRow(pos.Row) * RowStep + PlatformTopHeight / 2;
-
-        DrawCircle(centerX, centerY, 44, new Color(70, 0, 120, 45));
-        DrawCircle(centerX, centerY, 34, new Color(110, 0, 180, 65));
-        DrawCircle(centerX, centerY, 24, new Color(160, 40, 255, 90));
-    }
-    private void DrawAvailableMoves()
-    {
-        foreach (var move in _selectedMoves)
-        {
-            var pos = move.To;
-
-            int centerX =
-                Padding + ToScreenCol(pos.Col) * TileSize + TileSize / 2;
-
-            int centerY =
-                Padding + ToScreenRow(pos.Row) * RowStep + PlatformTopHeight / 2;
-
-            DrawCircle(
-                centerX,
-                centerY,
-                10,
-                new Color(60, 60, 60)
-            );
-        }
-    }
-    private void DrawPieces()
-    {
-        for (int row = 0; row < 8; row++)
-        {
-            for (int col = 0; col < 8; col++)
-            {
-                var position = new Position(row, col);
-                var piece = _game.Board.GetPiece(position);
-
-                if (piece is null)
-                    continue;
-
-                if (_moveAnimation.IsActive &&
-                    _moveAnimation.Piece is not null &&
-                    position == _moveAnimation.To)
-                {
-                    continue;
-                }
-
-                if (!_pieceTextures.TryGetValue((piece.Color, piece.Type), out var texture))
-                    continue;
-
-                int pieceSize = PieceSize;
-                Vector2 drawPosition = GetPieceDrawPosition(position, pieceSize);
-
-                var destination = new Rectangle(
-                    (int)drawPosition.X,
-                    (int)drawPosition.Y,
-                    pieceSize,
-                    pieceSize
-                );
-
-                _spriteBatch.Draw(texture, destination, Color.White);
-            }
-        }
-    }
     private void DrawStatus()
     {
         string text = _waitingForPromotion
@@ -611,30 +463,7 @@ public class Game1 : Game
             0f
         );
     }
-    private void DrawCircle(int centerX, int centerY, int radius, Color color)
-    {
-        for (int x = -radius; x <= radius; x++)
-        {
-            for (int y = -radius; y <= radius; y++)
-            {
-                if (x * x + y * y <= radius * radius)
-                {
-                    _spriteBatch.Draw(
-                        _pixel,
-                        new Rectangle(centerX + x, centerY + y, 1, 1),
-                        color
-                    );
-                }
-            }
-        }
-    }
-    private void DrawRectangleBorder(Rectangle rect, Color color, int thickness)
-    {
-        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
-        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
-        _spriteBatch.Draw(_pixel, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
-        _spriteBatch.Draw(_pixel, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
-    }
+
 
     //Castling
     private bool TryCastleByRookClick(Position rookPosition, Position kingPosition)
@@ -977,7 +806,7 @@ public class Game1 : Game
 
         var animatedPiece = _moveAnimation.Piece;
 
-        if (!_pieceTextures.TryGetValue((animatedPiece.Color, animatedPiece.Type), out var texture))
+        if (!_pieceRenderer.TryGetTexture(_moveAnimation.Piece, out var texture))
             return;
 
         int baseSize = PieceSize;
@@ -1018,53 +847,19 @@ public class Game1 : Game
     }
     private void StartShockwave(Position center)
     {
-        _isShockwaveActive = true;
-        _shockwaveCenter = center;
-        _shockwaveTimer = 0f;
+        _shockwave.Start(center);
     }
     private void UpdateShockwave(GameTime gameTime)
     {
-        if (!_isShockwaveActive)
-            return;
-
-        _shockwaveTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
-
-        if (_shockwaveTimer >= ShockwaveDuration)
-        {
-            _isShockwaveActive = false;
-            _shockwaveTimer = 0f;
-        }
+        _shockwave.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
     }
     private int GetShockwaveOffset(Position position)
     {
-        if (!_isShockwaveActive)
-            return 0;
-
-        int screenRow = ToScreenRow(position.Row);
-        int screenCol = ToScreenCol(position.Col);
-
-        int centerRow = ToScreenRow(_shockwaveCenter.Row);
-        int centerCol = ToScreenCol(_shockwaveCenter.Col);
-
-        float distance = MathF.Sqrt(
-            MathF.Pow(screenRow - centerRow, 2) +
-            MathF.Pow(screenCol - centerCol, 2)
+        return _shockwave.GetOffset(
+            position,
+            ToScreenRow,
+            ToScreenCol
         );
-
-        float time = _shockwaveTimer / ShockwaveDuration;
-
-        float waveRadius = time * 6f;
-        float waveWidth = 0.9f;
-
-        float delta = MathF.Abs(distance - waveRadius);
-
-        if (delta > waveWidth)
-            return 0;
-
-        float strength = 1f - delta / waveWidth;
-        float fade = 1f - time;
-
-        return (int)(-MathF.Sin(strength * MathF.PI) * 16f * fade);
     }
     private float SmoothStep(float t)
     {
