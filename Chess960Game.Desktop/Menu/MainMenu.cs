@@ -15,9 +15,9 @@ namespace Chess960Game.Desktop.Menu;
 public enum MainMenuResult
 {
     None,
-    Difficulty1,
-    Difficulty2,
-    Difficulty3
+    Easy,
+    Medium,
+    Hard
 }
 
 public class MainMenu
@@ -27,7 +27,7 @@ public class MainMenu
     private const int PlatformTopHeight = 88;
     private const int PlatformGap = 6;
     private const int PieceSize = 90;
-
+    private bool _knightSelected = false;
     private readonly Random _random = new();
 
     private readonly List<Position> _centralPositions = new()
@@ -64,27 +64,26 @@ public class MainMenu
             .ToList();
 
         if (moves.Count > 0)
-            _difficultyTargets[moves[0]] = MainMenuResult.Difficulty1;
+            _difficultyTargets[moves[0]] = MainMenuResult.Easy;
 
         if (moves.Count > 1)
-            _difficultyTargets[moves[1]] = MainMenuResult.Difficulty2;
+            _difficultyTargets[moves[1]] = MainMenuResult.Medium;
 
         if (moves.Count > 2)
-            _difficultyTargets[moves[2]] = MainMenuResult.Difficulty3;
+            _difficultyTargets[moves[2]] = MainMenuResult.Hard;
 
         _pendingResult = MainMenuResult.None;
+        _knightSelected = false;
     }
 
     public MainMenuResult Update(
-        GameTime gameTime,
-        MouseState mouseState,
-        MouseState previousMouseState)
+    GameTime gameTime,
+    MouseState mouseState,
+    MouseState previousMouseState)
     {
-        bool finishedMove = _moveAnimation.Update(
-            (float)gameTime.ElapsedGameTime.TotalSeconds
-        );
+        _moveAnimation.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
 
-        if (finishedMove || (!_moveAnimation.IsActive && _pendingResult != MainMenuResult.None))
+        if (!_moveAnimation.IsActive && _pendingResult != MainMenuResult.None)
         {
             var result = _pendingResult;
             _pendingResult = MainMenuResult.None;
@@ -104,10 +103,20 @@ public class MainMenu
         if (!TryGetMenuPosition(mouseState.X, mouseState.Y, out var clickedPosition))
             return MainMenuResult.None;
 
-        if (!_difficultyTargets.TryGetValue(clickedPosition, out var selectedDifficulty))
+        if (clickedPosition == _knightPosition)
+        {
+            _knightSelected = true;
+            return MainMenuResult.None;
+        }
+
+        if (!_knightSelected)
             return MainMenuResult.None;
 
-        _pendingResult = selectedDifficulty;
+        if (!_difficultyTargets.TryGetValue(clickedPosition, out var difficulty))
+            return MainMenuResult.None;
+
+        _pendingResult = difficulty;
+        _knightSelected = false;
 
         _moveAnimation.Start(
             new Piece(PieceType.Knight, PieceColor.White),
@@ -140,19 +149,47 @@ public class MainMenu
         );
 
         DrawDifficultyLabels(spriteBatch, font);
+        if (_knightSelected)
+        {
+            DrawSelectionGlow(spriteBatch, pixel, _knightPosition);
+        }
         DrawKnight(spriteBatch, pieceRenderer);
+        DrawHint(spriteBatch, font);
     }
+    private void DrawHint(SpriteBatch spriteBatch, SpriteFont font)
+    {
+        string text = "Choose difficulty level";
+        float scale = 0.42f;
 
+        Vector2 size = font.MeasureString(text) * scale;
+
+        Vector2 position = new Vector2(
+            _startX + TileSize * 2f - size.X / 2f,
+            _startY + RowStep * 4 + 60
+        );
+
+        spriteBatch.DrawString(
+            font,
+            text,
+            position,
+            Color.White,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            0f
+        );
+    }
     private void DrawTitle(SpriteBatch spriteBatch, SpriteFont font)
     {
         string title = "NEON GAMBIT";
-        float scale = 0.8f;
+        float scale = 0.85f;
 
         Vector2 size = font.MeasureString(title) * scale;
 
         Vector2 position = new Vector2(
             _startX + TileSize * 2f - size.X / 2f,
-            90
+            65
         );
 
         spriteBatch.DrawString(
@@ -174,9 +211,9 @@ public class MainMenu
         {
             string text = target.Value switch
             {
-                MainMenuResult.Difficulty1 => "1",
-                MainMenuResult.Difficulty2 => "2",
-                MainMenuResult.Difficulty3 => "3",
+                MainMenuResult.Easy => "Easy",
+                MainMenuResult.Medium => "Medium",
+                MainMenuResult.Hard => "Hard",
                 _ => ""
             };
 
@@ -302,7 +339,38 @@ public class MainMenu
 
         return new Vector2(pieceX, pieceY);
     }
+    private void DrawSelectionGlow(SpriteBatch spriteBatch, Texture2D pixel, Position position)
+    {
+        Vector2 center = GetCellCenter(position);
 
+        DrawCircle(spriteBatch, pixel, (int)center.X, (int)center.Y, 44, new Color(70, 0, 120, 45));
+        DrawCircle(spriteBatch, pixel, (int)center.X, (int)center.Y, 34, new Color(110, 0, 180, 65));
+        DrawCircle(spriteBatch, pixel, (int)center.X, (int)center.Y, 24, new Color(160, 40, 255, 90));
+    }
+
+    private void DrawCircle(
+        SpriteBatch spriteBatch,
+        Texture2D pixel,
+        int centerX,
+        int centerY,
+        int radius,
+        Color color)
+    {
+        for (int x = -radius; x <= radius; x++)
+        {
+            for (int y = -radius; y <= radius; y++)
+            {
+                if (x * x + y * y <= radius * radius)
+                {
+                    spriteBatch.Draw(
+                        pixel,
+                        new Rectangle(centerX + x, centerY + y, 1, 1),
+                        color
+                    );
+                }
+            }
+        }
+    }
     private float SmoothStep(float t)
     {
         return t * t * (3f - 2f * t);

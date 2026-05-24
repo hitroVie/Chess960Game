@@ -63,6 +63,8 @@ public class Game1 : Game
     private const int PlatformGap = 6;
     private const int RowStep = 105;
 
+    private const int BaseWindowSize = 1080;
+    private float _screenScale = 1f;
     // Piece rendering
     private readonly PieceRenderer _pieceRenderer = new();
     private const int PieceSize = 90;
@@ -100,11 +102,15 @@ public class Game1 : Game
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
 
-        int windowSize = BoardSize + Padding * 2;
+        var display = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode;
 
-        _graphics.PreferredBackBufferWidth = windowSize;
-        _graphics.PreferredBackBufferHeight = windowSize;
-        _graphics.ApplyChanges();
+        int targetSize = (int)(display.Height * 0.85f);
+        targetSize = Math.Min(targetSize, BaseWindowSize);
+
+        _screenScale = targetSize / (float)BaseWindowSize;
+
+        _graphics.PreferredBackBufferWidth = targetSize;
+        _graphics.PreferredBackBufferHeight = targetSize;
     }
 
     protected override void Initialize()
@@ -194,7 +200,10 @@ public class Game1 : Game
 
         if (leftClicked)
         {
-            HandleMouseClick(mouseState.X, mouseState.Y);
+            int scaledMouseX = (int)(mouseState.X / _screenScale);
+            int scaledMouseY = (int)(mouseState.Y / _screenScale);
+
+            HandleMouseClick(scaledMouseX, scaledMouseY);
         }
 
         _previousMouseState = mouseState;
@@ -205,7 +214,7 @@ public class Game1 : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        _spriteBatch.Begin();
+        _spriteBatch.Begin(transformMatrix: Matrix.CreateScale(_screenScale));
 
         DrawBackground();
 
