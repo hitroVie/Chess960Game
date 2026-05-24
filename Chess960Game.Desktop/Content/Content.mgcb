@@ -81,3 +81,68 @@
 /importer:TextureImporter
 /processor:TextureProcessor
 /build:Backgrounds/background.png
+
+#begin Sounds/move_1.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/move_1.ogg
+
+#begin Sounds/move_2.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/move_2.ogg
+
+#begin Sounds/move_3.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/move_3.ogg
+
+#begin Sounds/move_4.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/move_4.ogg
+
+#begin Sounds/capture_1.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/capture_1.ogg
+
+#begin Sounds/capture_2.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/capture_2.ogg
+
+#begin Sounds/capture_3.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/capture_3.ogg
+
+#begin Sounds/capture_4.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/capture_4.ogg
+
+#begin Sounds/check.ogg
+/importer:OggImporter
+/processor:SoundEffectProcessor
+/build:Sounds/check.ogg
+
+#begin Music/background.mp3
+/importer:Mp3Importer
+/processor:SongProcessor
+/build:Music/background.mp3
+
+#begin UI/music_mute.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/build:UI/music_mute.png
+
+#begin UI/music_on.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/build:UI/music_on.png
+
+#begin UI/home.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/build:UI/home.png

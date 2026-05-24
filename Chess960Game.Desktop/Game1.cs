@@ -14,6 +14,8 @@ using Chess960Game.Domain.Bot;
 using Chess960Game.Desktop.Animation;
 using Chess960Game.Desktop.Rendering;
 using Chess960Game.Desktop.Menu;
+using Microsoft.Xna.Framework.Audio;
+using Microsoft.Xna.Framework.Media;
 
 namespace Chess960Game.Desktop;
 
@@ -30,6 +32,16 @@ public class Game1 : Game
     private Texture2D _pixel;
     private Texture2D _backgroundTexture;
     private SpriteFont _font;
+    private SoundEffect[] _moveSounds;
+    private SoundEffect[] _captureSounds;
+    private SoundEffect _checkSound;
+    private Song _backgroundMusic;
+    private Texture2D _musicOnIcon;
+    private Texture2D _musicMuteIcon;
+    private bool _musicMuted = false;
+    private readonly Rectangle _musicButtonRect = new Rectangle(20, 1000, 54, 54);
+    private Texture2D _homeIcon;
+    private readonly Rectangle _homeButtonRect = new Rectangle(84, 1000, 54, 54);
 
     // Core game state
     private GameState _game;
@@ -140,16 +152,51 @@ public class Game1 : Game
         _pixel.SetData(new[] { Color.White });
 
         _font = Content.Load<SpriteFont>("DefaultFont");
+        _moveSounds =
+        [
+            Content.Load<SoundEffect>("Sounds/move_1"),
+            Content.Load<SoundEffect>("Sounds/move_2"),
+            Content.Load<SoundEffect>("Sounds/move_3"),
+            Content.Load<SoundEffect>("Sounds/move_4")
+        ];
+        _musicOnIcon = Content.Load<Texture2D>("UI/music_on");
+        _musicMuteIcon = Content.Load<Texture2D>("UI/music_mute");
+
+        _captureSounds =
+        [
+            Content.Load<SoundEffect>("Sounds/capture_1"),
+            Content.Load<SoundEffect>("Sounds/capture_2"),
+            Content.Load<SoundEffect>("Sounds/capture_3"),
+            Content.Load<SoundEffect>("Sounds/capture_4")
+        ];
+
+        _backgroundMusic = Content.Load<Song>("Music/background");
+        _homeIcon = Content.Load<Texture2D>("UI/home");
+
+        MediaPlayer.IsRepeating = true;
+        MediaPlayer.Volume = 0.8f;
+        MediaPlayer.Play(_backgroundMusic);
+
+        _checkSound = Content.Load<SoundEffect>("Sounds/check");
+
         _pieceRenderer.LoadContent(Content);
     }
- 
+
     protected override void Update(GameTime gameTime)
     {
         if (Keyboard.GetState().IsKeyDown(Keys.Escape))
             Exit();
+
         if (_screenState == GameScreenState.MainMenu)
         {
             var menuMouseState = Mouse.GetState();
+
+            if (HandleMusicButtonClick(menuMouseState, _previousMouseState))
+            {
+                _previousMouseState = menuMouseState;
+                base.Update(gameTime);
+                return;
+            }
 
             var menuResult = _mainMenu.Update(
                 gameTime,
@@ -194,6 +241,19 @@ public class Game1 : Game
 
         var mouseState = Mouse.GetState();
 
+        if (HandleMusicButtonClick(mouseState, _previousMouseState))
+        {
+            _previousMouseState = mouseState;
+            base.Update(gameTime);
+            return;
+        }
+
+        if (HandleHomeButtonClick(mouseState, _previousMouseState))
+        {
+            _previousMouseState = mouseState;
+            base.Update(gameTime);
+            return;
+        }
         bool leftClicked =
             mouseState.LeftButton == ButtonState.Pressed &&
             _previousMouseState.LeftButton == ButtonState.Released;
@@ -209,6 +269,47 @@ public class Game1 : Game
         _previousMouseState = mouseState;
 
         base.Update(gameTime);
+    }
+    private bool HandleMusicButtonClick(MouseState mouseState, MouseState previousMouseState)
+    {
+        bool leftClicked =
+            mouseState.LeftButton == ButtonState.Pressed &&
+            previousMouseState.LeftButton == ButtonState.Released;
+
+        if (!leftClicked)
+            return false;
+
+        int scaledMouseX = (int)(mouseState.X / _screenScale);
+        int scaledMouseY = (int)(mouseState.Y / _screenScale);
+
+        if (!_musicButtonRect.Contains(scaledMouseX, scaledMouseY))
+            return false;
+
+        _musicMuted = !_musicMuted;
+        MediaPlayer.Volume = _musicMuted ? 0f : 0.15f;
+
+        return true;
+    }
+    private bool HandleHomeButtonClick(MouseState mouseState, MouseState previousMouseState)
+    {
+        bool leftClicked =
+            mouseState.LeftButton == ButtonState.Pressed &&
+            previousMouseState.LeftButton == ButtonState.Released;
+
+        if (!leftClicked)
+            return false;
+
+        int scaledMouseX = (int)(mouseState.X / _screenScale);
+        int scaledMouseY = (int)(mouseState.Y / _screenScale);
+
+        if (!_homeButtonRect.Contains(scaledMouseX, scaledMouseY))
+            return false;
+
+        RestartGame();
+        _screenState = GameScreenState.MainMenu;
+        _mainMenu.Reset();
+
+        return true;
     }
     protected override void Draw(GameTime gameTime)
     {
@@ -227,6 +328,9 @@ public class Game1 : Game
                 _boardRenderer,
                 _pieceRenderer
             );
+
+            DrawMusicButton();
+            DrawHomeButton();
 
             _spriteBatch.End();
             base.Draw(gameTime);
@@ -260,13 +364,57 @@ public class Game1 : Game
         );
         DrawMoveAnimation();
         DrawStatus();
-
+        DrawMusicButton();
+        DrawHomeButton();
 
         _spriteBatch.End();
 
         base.Draw(gameTime);
     }
+    private void DrawHomeButton()
+    {
+        if (_screenState == GameScreenState.MainMenu)
+            return;
 
+        _spriteBatch.Draw(_homeIcon, _homeButtonRect, Color.White);
+    }
+    private void DrawMusicButton()
+    {
+        var icon = _musicMuted
+            ? _musicMuteIcon
+            : _musicOnIcon;
+
+        _spriteBatch.Draw(icon, _musicButtonRect, Color.White);
+    }
+    private void RestartGame()
+    {
+        var setupGenerator = new Chess960SetupGenerator();
+
+        _game = setupGenerator.CreateNewGame();
+
+        _selectedPosition = null;
+        _selectedMoves.Clear();
+
+        _waitingForPromotion = false;
+        _promotionFrom = null;
+        _promotionTo = null;
+        _promotionColor = null;
+
+        _statusText = "";
+        _gameOver = false;
+
+        _whiteKingMoved = false;
+        _blackKingMoved = false;
+        _whiteKingsideRookMoved = false;
+        _whiteQueensideRookMoved = false;
+        _blackKingsideRookMoved = false;
+        _blackQueensideRookMoved = false;
+
+        _fullMoveNumber = 1;
+
+        _botMovePending = false;
+        _botMoveDelayTimer = 0f;
+    }
     //Input
     private void HandleMouseClick(int mouseX, int mouseY)
     {
@@ -351,13 +499,15 @@ public class Game1 : Game
 
             MarkPieceMoved(from, piece);
 
+            bool isCapture = _game.Board.GetPiece(clickedPosition) is not null;
             _game.Board.MovePiece(from, clickedPosition);
 
             StartMoveAnimation(
                 piece,
                 from,
                 clickedPosition,
-                animationType
+                animationType,
+                isCapture
             );
 
             _game.SwitchTurn();
@@ -777,6 +927,7 @@ public class Game1 : Game
             return;
 
         var boardCopy = _game.Board.Clone();
+        bool isCapture = _game.Board.GetPiece(selectedMove.To) is not null;
 
         if (selectedMove.Promotion is not null)
         {
@@ -815,7 +966,8 @@ public class Game1 : Game
                 new Piece(PieceType.Queen, piece.Color),
                 selectedMove.From,
                 selectedMove.To,
-                animationType
+                animationType,
+                isCapture
             );
         }
         else
@@ -826,7 +978,8 @@ public class Game1 : Game
                 piece,
                 selectedMove.From,
                 selectedMove.To,
-                animationType
+                animationType,
+                isCapture
             );
         }
 
@@ -837,8 +990,14 @@ public class Game1 : Game
     }
 
     //Animation
-    private void StartMoveAnimation(Piece piece, Position from, Position to, MoveAnimationType type = MoveAnimationType.Normal)
+    private void StartMoveAnimation(
+    Piece piece,
+    Position from,
+    Position to,
+    MoveAnimationType type = MoveAnimationType.Normal,
+    bool isCapture = false)
     {
+        PlayMoveSound(type, isCapture);
         _moveAnimation.Start(piece, from, to, type);
     }
     private void UpdateMoveAnimation(GameTime gameTime)
@@ -852,6 +1011,25 @@ public class Game1 : Game
             StartShockwave(_moveAnimation.To);
         }
     }
+    private void PlayMoveSound(MoveAnimationType type, bool isCapture)
+    {
+        if (isCapture && _captureSounds.Length > 0)
+        {
+            var sound = _captureSounds[_random.Next(_captureSounds.Length)];
+            sound.Play(0.18f, 0f, 0f);
+        }
+        else if (_moveSounds.Length > 0)
+        {
+            var sound = _moveSounds[_random.Next(_moveSounds.Length)];
+            sound.Play(0.2f, 0f, 0f);
+        }
+
+        if (type == MoveAnimationType.Attack)
+        {
+            _checkSound.Play(0.6f, 0f, 0f);
+        }
+    }
+    
     private void DrawMoveAnimation()
     {
         if (!_moveAnimation.IsActive || _moveAnimation.Piece is null)
